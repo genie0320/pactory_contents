@@ -1,0 +1,14 @@
+[Unit]
+Description=Seed Content Studio Streamlit Web Application
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/pactory_contents
+Environment="PATH=%h/pactory_contents/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=%h/pactory_contents/.venv/bin/streamlit run src/ui/app.py --server.port 8501 --server.address 0.0.0.0 --server.headless true --browser.gatherUsageStats false
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

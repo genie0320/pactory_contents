@@ -1,0 +1,11 @@
+[Unit]
+Description=Seed Synthesis Engine Automated Indexing Service
+After=network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/pactory_contents
+ExecStart=%h/pactory_contents/scripts/run_pipeline.sh
+
+[Install]
+WantedBy=default.target

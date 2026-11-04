@@ -1,0 +1,44 @@
+paths:
+  data_dir: "./data"
+  inbox_dir: "./data/inbox"
+  archive_dir: "./data/archive"
+  processed_dir: "./data/processed"
+  texts_dir: "./data/processed/texts"
+  metadata_dir: "./data/processed/metadata"
+  assets_dir: "./data/processed/assets"
+  index_dir: "./data/index"
+  db_path: "./data/index/catalog.db"
+  outputs_dir: "./data/outputs"
+
+image_filter:
+  min_width: 250
+  min_height: 150
+  min_aspect_ratio: 0.2
+  max_aspect_ratio: 5.0
+
+extraction:
+  concurrency: 5
+  max_retries: 4
+  retry_backoff_factor: 2.0
+  default_provider: "openai"
+  default_model: "gpt-4o-mini"
+
+retrieval:
+  top_k_candidates: 15
+  bm25_weights:
+    title: 2.0
+    core_problem: 2.5
+    reframing_logic: 3.0
+    solution_framework: 2.0
+    topic_tags: 2.5
+    notable_episodes: 1.5
+  jaccard_threshold: 0.5
+
+taxonomy:
+  categories:
+    - "업무스킬"
+    - "서비스기획/AI"
+    - "마케팅/브랜딩"
+    - "커리어/이직"
+    - "부업/수익화"
+    - "자기관리"

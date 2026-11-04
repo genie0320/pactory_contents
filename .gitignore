@@ -1,0 +1,38 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+env/
+
+# Environment variables & secrets (CRITICAL)
+.env
+.env.local
+*.key
+*.token
+
+# Testing & caches
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Antigravity Scratch & Generated Logs
+scratch/
+.system_generated/
+
+# Local databases
+*.db
+*.db-journal
+*.sqlite3
+
+# Large Binary Files (Raw PDFs & Extracted heavy asset folders)
+articles/*.pdf
+data/archive/*.pdf
+data/inbox/*.pdf
+local_inbox/*
+!local_inbox/.gitkeep
