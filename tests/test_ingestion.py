@@ -171,3 +171,5 @@ def test_10_sample_articles_ingestion(tmp_path: Path):
     # Test duplicate check: re-scanning inbox without force should return existing without re-processing
     re_records = scanner.scan_inbox(inbox_dir=inbox_dir, force=False)
     assert len(re_records) == 10
+    assert len(scanner.last_skipped_duplicates) == 10
+    assert len(scanner.last_newly_processed) == 0

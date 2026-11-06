@@ -386,17 +386,29 @@ with tabs[0]:
                         dest_path.write_bytes(uf.getbuffer())
                         saved_count += 1
 
-                    with st.status(f"{saved_count}개 문서 저장 완료. 파이프라인 실행 중...", expanded=True) as status_box:
-                        st.write("1단계: Inbox 스캔 및 텍스트/이미지 분리 추출 중...")
-                        scanned_records = scanner.scan_inbox()
-                        st.write(f"  └ {len(scanned_records)}건 추출 완료")
+                    with st.status(f"{saved_count}개 문서 업로드 완료. 중복 검사 및 파이프라인 처리 중...", expanded=True) as status_box:
+                        st.write("1단계: Inbox 스캔 및 중복 문서 검증 중...")
+                        scanner.scan_inbox(move_archive=True)
+                        new_records = scanner.last_newly_processed
+                        skipped_dups = scanner.last_skipped_duplicates
 
-                        st.write("2단계: 메타데이터 추출 및 FTS5 색인 중...")
-                        indexed_records = extractor.run_sync()
-                        st.write(f"  └ {len(indexed_records)}건 색인 등록 완료")
+                        if skipped_dups:
+                            for s in skipped_dups:
+                                st.warning(f"⏩ **[중복 건너뜀]** `{s['file']}` → 기존 Seed #{s['doc_id']} ('{s['title']}')와 {s['reason']}")
 
-                        status_box.update(label="🎉 파일 업로드 및 전체 색인 파이프라인 완료!", state="complete", expanded=False)
-                    st.success(f"총 {saved_count}개 파일이 정상적으로 수집 및 색인되었습니다.")
+                        st.write(f"  └ 신규 수집: **{len(new_records)}건**, 중복 제외: **{len(skipped_dups)}건**")
+
+                        if len(new_records) > 0:
+                            st.write(f"2단계: 신규 문서 메타데이터 추출 및 FTS5 색인 중... (AI 모델: {extract_llm.model})")
+                            new_doc_ids = [r.doc_id for r in new_records]
+                            indexed_records = extractor.run_sync(doc_ids=new_doc_ids)
+                            st.write(f"  └ {len(indexed_records)}건 신규 색인 완료")
+                            status_box.update(label="🎉 신규 문서 색인 완료!", state="complete", expanded=False)
+                            st.success(f"신규 {len(indexed_records)}건의 문서가 정상적으로 색인되었습니다.")
+                        else:
+                            st.write("2단계: 신규 문서가 없으므로 AI 호출(토큰 소진)을 자동으로 건너뛰었습니다.")
+                            status_box.update(label="ℹ️ 모든 문서가 중복으로 확인되어 색인이 건너뛰어졌습니다.", state="complete", expanded=False)
+                            st.info("💡 업로드된 파일이 이미 데이터베이스에 존재하여 불필요한 AI 호출 없이 건너뛰었습니다.")
                     st.rerun()
 
     st.markdown("---")
@@ -404,8 +416,10 @@ with tabs[0]:
     with col_act1:
         if st.button("📥 Inbox 신규 파일 수집 (Ingest)", use_container_width=True):
             with st.spinner("Inbox 스캔 및 텍스트/이미지 추출 중..."):
-                records = scanner.scan_inbox()
-                st.success(f"수집 완료: {len(records)}건의 아티클 처리됨")
+                scanner.scan_inbox(move_archive=True)
+                new_cnt = len(scanner.last_newly_processed)
+                dup_cnt = len(scanner.last_skipped_duplicates)
+                st.success(f"수집 완료: 신규 {new_cnt}건 처리됨 (중복 {dup_cnt}건 제외)")
                 st.rerun()
     with col_act2:
         if st.button("🧠 미색인 문서 메타데이터 추출 (Extract)", use_container_width=True):
@@ -615,7 +629,7 @@ with tabs[1]:
 
         with col_s_right:
             st.markdown("#### 🗺️ AI 합성 설계도 (Synthesis Blueprint)")
-            curr_m = getattr(llm, "model", "Gemini")
+            curr_m = getattr(synth_llm, "model", "Gemini")
             if bp:
                 st.success(f"**제안 제목:** {bp.proposed_title}")
                 st.markdown(f"**타깃 독자:** {bp.target_reader_definition}")
@@ -688,7 +702,7 @@ with tabs[1]:
         arch_enum = st.session_state.get("t2_arch_enum")
         use_style = st.session_state.get("t2_use_style", False)
         active_prof = style_learner.get_active_profile() if use_style else None
-        curr_m = getattr(llm, "model", "Gemini")
+        curr_m = getattr(synth_llm, "model", "Gemini")
 
         if not st.session_state.get("t2_synthesis_done", False):
             prog_bar = st.progress(0.15, text="⏳ [1/3] 상호보완 Seed 원문 재료 탈색(Distillation) 진행 중...")

@@ -25,6 +25,8 @@ class IngestionScanner:
             processed_dir=self.config.paths.processed_dir,
         )
         self.pdf_processor = PDFProcessor(image_filter=self.config.image_filter)
+        self.last_skipped_duplicates: List[dict] = []
+        self.last_newly_processed: List[ArticleRecord] = []
 
     @staticmethod
     def compute_sha256(file_path: Path) -> str:
@@ -66,6 +68,9 @@ class IngestionScanner:
         if not target_dir.exists():
             return []
 
+        self.last_skipped_duplicates = []
+        self.last_newly_processed = []
+
         processed_records: List[ArticleRecord] = []
         supported_extensions = {".pdf", ".md", ".txt"}
         candidate_files = [p for p in target_dir.iterdir() if p.is_file() and p.suffix.lower() in supported_extensions]
@@ -104,7 +109,7 @@ class IngestionScanner:
         self.repo.complete_job(
             job_id=job_id,
             status="COMPLETED",
-            log_summary=f"Ingested {len(processed_records)}/{len(candidate_files)} files.",
+            log_summary=f"Ingested {len(processed_records)}/{len(candidate_files)} files (New: {len(self.last_newly_processed)}, Duplicates Skipped: {len(self.last_skipped_duplicates)}).",
         )
 
         return processed_records
@@ -117,8 +122,10 @@ class IngestionScanner:
     ) -> Optional[ArticleRecord]:
         """Process a single file through the ingestion pipeline."""
         content_hash = self.compute_sha256(file_path)
+        filename = file_path.name
+        doc_id, extracted_title = self.parse_filename(filename)
 
-        # Check duplication in database
+        # 1. Check duplication by content hash (exact file bytes match)
         existing = self.repo.get_article_by_hash(content_hash)
         if existing and not force:
             if move_archive:
@@ -126,10 +133,48 @@ class IngestionScanner:
                     file_path.unlink(missing_ok=True)
                 except Exception:
                     pass
+            self.last_skipped_duplicates.append({
+                "file": filename,
+                "doc_id": existing.doc_id,
+                "title": existing.title,
+                "reason": "해시(SHA-256) 일치 (동일한 원본 파일)",
+            })
             return existing
 
-        filename = file_path.name
-        doc_id, extracted_title = self.parse_filename(filename)
+        # 2. Check duplication by explicit doc_id (e.g. 7165 in filename)
+        if doc_id and not force:
+            existing_doc = self.repo.get_article(doc_id)
+            if existing_doc:
+                if move_archive:
+                    try:
+                        file_path.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                self.last_skipped_duplicates.append({
+                    "file": filename,
+                    "doc_id": doc_id,
+                    "title": existing_doc.title,
+                    "reason": f"문서 ID (#{doc_id}) 중복",
+                })
+                return existing_doc
+
+        # 3. Check duplication by title
+        if extracted_title and len(extracted_title) > 3 and not force:
+            existing_title = self.repo.get_article_by_title(extracted_title)
+            if existing_title:
+                if move_archive:
+                    try:
+                        file_path.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                self.last_skipped_duplicates.append({
+                    "file": filename,
+                    "doc_id": existing_title.doc_id,
+                    "title": existing_title.title,
+                    "reason": f"문서 제목('{extracted_title}') 중복",
+                })
+                return existing_title
+
         if not doc_id:
             # Fallback to first 8 chars of SHA-256
             doc_id = content_hash[:8]
@@ -194,4 +239,5 @@ class IngestionScanner:
         if visual_assets:
             self.repo.save_visual_assets(doc_id=doc_id, assets=visual_assets)
 
+        self.last_newly_processed.append(article)
         return article

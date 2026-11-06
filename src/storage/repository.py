@@ -104,6 +104,17 @@ class StorageRepository:
                 return None
             return self._row_to_article(row)
 
+    def get_article_by_title(self, title: str) -> Optional[ArticleRecord]:
+        """Fetch article by exact title."""
+        if not title:
+            return None
+        with get_db(self.db_path) as conn:
+            cursor = conn.execute("SELECT * FROM articles WHERE title = ?", (title.strip(),))
+            row = cursor.fetchone()
+            if not row:
+                return None
+            return self._row_to_article(row)
+
     def list_articles(self, status: Optional[Union[str, ArticleStatus]] = None) -> List[ArticleRecord]:
         """List articles, optionally filtered by status."""
         query = "SELECT * FROM articles"
