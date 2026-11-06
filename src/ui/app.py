@@ -8,11 +8,20 @@ Tab 4: 나의 결과물 & 스타일 학습소 (My Corpus & Style Learning)
 
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Optional
+
+# Ensure project root is in sys.path so 'src' can be imported anywhere
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 import streamlit as st
 
-from src.config import load_config
+from src.config import load_config, load_env_file
+# Ensure .env is loaded before anything else
+load_env_file()
 from src.extraction.batch_extractor import BatchMetadataExtractor
 from src.extraction.llm_client import LLMClient
 from src.ingestion.scanner import IngestionScanner
@@ -90,22 +99,11 @@ if "notes_text" not in st.session_state:
 if "t2_step" not in st.session_state:
     st.session_state["t2_step"] = 1
 if "t2_topic" not in st.session_state:
-    st.session_state["t2_topic"] = '"기획은 AI가 잘해요" 정말 그럴까요?'
+    st.session_state["t2_topic"] = ""
 if "t2_direction" not in st.session_state:
-    st.session_state["t2_direction"] = (
-        "기획은 AI가 대체할 수 있다는 말을 들었어요. 과연그럴까요?\n"
-        "AI는 분명 실행의 단계를 엄청나게 줄여줬지만 아직 '생각'을 대체할 수는 없다고 해요. "
-        "무한한 AI의 능력으로 '내가 원하는 결과'를 얻어내기 위해서는 적어도 내가 '무엇때문에 어떤 목적을 이루려고 한다'는 방향성제시는 해줘야 하거든요.\n\n"
-        "'회원수첩앱만들어줘'만으로는 적절하지 않아요. 회원은 몇명이나 있는지, 회원가입은 어떤 방식으로 하는지, 회원권한은 어떻게 정리할 것이며, "
-        "사용자들은 해당 앱을 이용해서 어떤 혜택을 받을 수 있게 되는지 등... spec-kit, Specdd나 gstack이 이런 부분에 대해서 질문을 하고 구멍을 메운다해도, "
-        "어디까지나 인간이 '프롬프트로 던졌던' 범위 내에서의 질문일 뿐이죠. 현장의 제한이나 비즈니스목표같은 것은 묻지도 따지지도 않아요. "
-        "그래서 오버엔지니어링이 나오고 고작 300명이 이용하는 회원수첩앱에 한달 이용료가 50만원이나 나오는 클라우드 스펙을 붙이는 결과가 나오게 되니까요.\n\n"
-        "코딩은 AI가 너무 잘해요. 하지만 목적과 방향은 여전히 인간이 설정해줘야 하고, 검토도 아직은 인간이 완전히 손을 놓을 수 없는 영역이예요. "
-        "그리고 그걸 하는 사람이 바로 기획자예요. 만약 지금 떠오르는 기획자가 아묻따 피그마로 그림만 그려대거나 개발기간을 벌기위한 말많은 사람에 불과했다면, "
-        "그건 진짜 기획자를 만나보지 못했기 때문이예요."
-    )
-if "t2_seeds" not in st.session_state:
-    st.session_state["t2_seeds"] = None
+    st.session_state["t2_direction"] = ""
+if "t2_seeds" not in st.session_state or st.session_state["t2_seeds"] is None:
+    st.session_state["t2_seeds"] = []
 if "t2_blueprint" not in st.session_state:
     st.session_state["t2_blueprint"] = None
 
@@ -116,24 +114,21 @@ with st.sidebar:
     has_gemini = bool(os.getenv("GEMINI_API_KEY") or (getattr(llm, "provider", "") == "gemini" and getattr(llm, "api_key", None)))
     has_openai = bool(os.getenv("OPENAI_API_KEY") or (getattr(llm, "provider", "") == "openai" and getattr(llm, "api_key", None)))
 
-    curr_model = getattr(llm, "model", "gemini-3.8-flash")
-    curr_effort = getattr(llm, "thinking_level", "medium")
+    curr_model = getattr(llm, "model", "gemini-3.5-flash-lite")
+    curr_effort = getattr(llm, "thinking_level", "low")
 
     if has_gemini:
         st.success(f"🟢 Gemini ({curr_model} | {curr_effort.upper()})\n실시간 AI 추론 모드")
     elif has_openai:
         st.success(f"🟢 OpenAI ({curr_model} | {curr_effort.upper()})\n실시간 AI 추론 모드")
     else:
-        st.warning(f"⚡ 스마트 로컬 엔진 가동 중\n(API 키 미설정 시 고성능 룰 기반 휴리스틱 엔진 동작 | 기본 모델: {curr_model})")
+        st.warning(f"⚠️ API 키 미설정\n(.env 파일에 GEMINI_API_KEY를 설정해 주세요.)")
 
     # Dynamic Model Selector
     model_options = [
+        "gemini-3.5-flash-lite",
         "gemini-3.8-flash",
         "gemini-3.8-pro",
-        "gemini-3.6-flash",
-        "gemini-3.5-flash-lite",
-        "gemini-2.5-flash",
-        "gemini-2.5-pro",
         "gemini-2.0-flash",
         "gpt-4o-mini",
         "gpt-4o",
@@ -145,7 +140,7 @@ with st.sidebar:
         "🧠 AI 추론 모델 선택",
         options=model_options,
         index=model_options.index(curr_model) if curr_model in model_options else 0,
-        help="목적에 따라 3.8 Flash(초고속 가성비) 또는 3.8 Pro(심층 사유/문장력) 모델을 자유롭게 전환할 수 있습니다.",
+        help="안정적이고 빠른 gemini-3.5-flash-lite가 기본이며, 필요 시 3.8 Flash 또는 3.8 Pro 모델로 전환할 수 있습니다.",
     )
 
     # Thinking / Reasoning Effort Selector
@@ -392,15 +387,23 @@ with tabs[1]:
         st.subheader("💡 1단계. 타깃 주제와 나만의 관점/경험담 입력")
         t_val = st.text_input(
             "새로 작성할 타깃 주제 (Topic)",
-            value=st.session_state.get("t2_topic", '"기획은 AI가 잘해요" 정말 그럴까요?'),
+            value=st.session_state.get("t2_topic", ""),
+            placeholder="예: 생성형 AI 시대, 비즈니스 기획자가 갖춰야 할 진짜 경쟁력",
             key="t2_input_topic",
         )
         d_val = st.text_area(
             "집필 방향 및 나만의 고유한 관점/경험담 (Direction)",
             value=st.session_state.get("t2_direction", ""),
+            placeholder="자신만의 주장, 현장 경험, 차별화된 문제의식 등을 자유롭게 서술하세요.",
             height=200,
             key="t2_input_direction",
         )
+
+        # Real-time state synchronization: Keep t2_topic and t2_direction up to date
+        if t_val != st.session_state.get("t2_topic"):
+            st.session_state["t2_topic"] = t_val
+        if d_val != st.session_state.get("t2_direction"):
+            st.session_state["t2_direction"] = d_val
 
         col_cfg1, col_cfg2, col_cfg3 = st.columns([2, 1, 1])
         with col_cfg1:
@@ -418,38 +421,50 @@ with tabs[1]:
                 disabled=not has_profile,
             )
 
-        if st.button("다음 2단계: 상호보완 Seed 탐색 및 AI 설계도 기획 ➡️", type="primary", use_container_width=True):
+        if st.button("다음 2단계: 상호보완 Seed 탐색 ➡️", type="primary", use_container_width=True):
             if not t_val.strip():
                 st.warning("타깃 주제를 입력해 주세요.")
             else:
-                with st.spinner("AI가 적합한 상호보완 Seed 문서를 검색하고 합성 설계도(Blueprint)를 기획 중입니다..."):
-                    st.session_state["t2_topic"] = t_val
-                    st.session_state["t2_direction"] = d_val
-                    st.session_state["t2_arch_enum"] = arch_enum
-                    st.session_state["t2_use_style"] = use_style
+                st.session_state["t2_topic"] = t_val
+                st.session_state["t2_direction"] = d_val
+                st.session_state["t2_arch_enum"] = arch_enum
+                st.session_state["t2_use_style"] = use_style
 
+                with st.spinner("🔍 로컬 카탈로그 DB에서 상호보완 Seed 문서를 선별 중입니다..."):
                     candidate_seeds = retriever.select_complementary_seeds(
                         topic=t_val,
                         direction=d_val,
                         target_archetype=arch_enum,
                         count=seed_count,
                     )
-                    blueprint = synthesizer.planner.plan_blueprint_sync(
-                        topic=t_val,
-                        direction=d_val,
-                        seeds=candidate_seeds,
-                        archetype=arch_enum,
-                    )
-                    st.session_state["t2_seeds"] = candidate_seeds
-                    st.session_state["t2_blueprint"] = blueprint
-                    st.session_state["t2_step"] = 2
-                    st.rerun()
+                st.session_state["t2_seeds"] = candidate_seeds
+                # Reset previous blueprint so stale data is not displayed
+                st.session_state["t2_blueprint"] = None
+                st.session_state["t2_synthesis_done"] = False
+                st.session_state["t2_step"] = 2
+                st.rerun()
 
     # Step 2: Review Seeds & Blueprint
     elif current_step == 2:
         st.subheader("📐 2단계. 선별된 상호보완 Seed 문서 & AI 설계도(Blueprint) 검토")
 
-        c_seeds = st.session_state.get("t2_seeds", [])
+        cur_t = st.session_state.get("t2_topic", "")
+        cur_d = st.session_state.get("t2_direction", "")
+
+        # Target Topic & Context Confirmation Banner
+        st.markdown(
+            f"""
+            <div style="background-color: rgba(30, 136, 229, 0.08); border-left: 4px solid #1E88E5; padding: 12px 16px; border-radius: 6px; margin-bottom: 16px;">
+                <div style="font-size: 13px; font-weight: 700; color: #1565C0; margin-bottom: 4px;">🎯 1단계에서 확정한 타깃 주제</div>
+                <div style="font-size: 16px; font-weight: 700; color: #111; margin-bottom: 6px;">{cur_t or '미지정'}</div>
+                <div style="font-size: 12px; font-weight: 700; color: #555; margin-bottom: 4px;">🧭 나만의 집필 방향 및 고유 관점 (Context)</div>
+                <div style="font-size: 13px; color: #333; line-height: 1.5; white-space: pre-wrap;">{cur_d or '미지정'}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        c_seeds = st.session_state.get("t2_seeds") or []
         bp = st.session_state.get("t2_blueprint")
 
         col_s_left, col_s_right = st.columns([1, 1])
@@ -468,6 +483,7 @@ with tabs[1]:
 
         with col_s_right:
             st.markdown("#### 🗺️ AI 합성 설계도 (Synthesis Blueprint)")
+            curr_m = getattr(llm, "model", "Gemini")
             if bp:
                 st.success(f"**제안 제목:** {bp.proposed_title}")
                 st.markdown(f"**타깃 독자:** {bp.target_reader_definition}")
@@ -476,17 +492,57 @@ with tabs[1]:
                 for sec in bp.section_outline:
                     st.write(f"- {sec}")
             else:
-                st.info("설계도가 아직 생성되지 않았습니다.")
+                st.info(
+                    f"💡 좌측의 상호보완 Seed 문서 {len(c_seeds)}건이 준비되었습니다.\n\n"
+                    f"아래 버튼을 누르면 AI 모델(`{curr_m}`)이 고유 관점과 Seed를 융합하여 맞춤형 설계도를 기획합니다."
+                )
+                if st.button("🤖 AI 합성 설계도 기획 시작 (약 5~10초 소요)", type="primary", use_container_width=True):
+                    with st.spinner(f"🤖 {curr_m} 모델이 상호보완 Seed를 융합하여 맞춤형 설계도를 기획 중입니다... (최대 30초 대기)"):
+                        try:
+                            bp = synthesizer.planner.plan_blueprint_sync(
+                                topic=cur_t,
+                                direction=cur_d,
+                                seeds=c_seeds,
+                                archetype=st.session_state.get("t2_arch_enum"),
+                            )
+                            st.session_state["t2_blueprint"] = bp
+                            st.success("✅ AI 합성 설계도 기획 완료!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"⚠️ AI 설계도 기획 중 오류가 발생했습니다: {e}")
+                            st.warning("Google Gemini API 통신 지연 또는 일시 혼잡일 수 있습니다. 사이드바에서 다른 모델(예: gemini-3.5-flash-lite)을 선택하거나 잠시 후 다시 시도해 주세요.")
 
         st.divider()
-        col_nav1, col_nav2 = st.columns([1, 2])
+        col_nav1, col_nav2, col_nav3 = st.columns([1, 1, 2])
         with col_nav1:
             if st.button("⬅️ 1단계로 돌아가서 수정", use_container_width=True):
                 st.session_state["t2_step"] = 1
                 st.rerun()
         with col_nav2:
-            if st.button("다음 3단계: AI 중립 초안 집필 시작 🚀", type="primary", use_container_width=True):
+            if st.button("🔄 AI 설계도 다시 기획하기", disabled=(bp is None), use_container_width=True):
+                with st.spinner(f"AI({curr_m})가 새로운 관점의 설계도를 다시 기획 중입니다..."):
+                    try:
+                        new_bp = synthesizer.planner.plan_blueprint_sync(
+                            topic=cur_t,
+                            direction=cur_d,
+                            seeds=c_seeds,
+                            archetype=st.session_state.get("t2_arch_enum"),
+                        )
+                        st.session_state["t2_blueprint"] = new_bp
+                        st.success("새로운 설계도가 생성되었습니다!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"⚠️ 다시 기획 중 오류 발생: {e}")
+        with col_nav3:
+            if st.button(
+                "다음 3단계: AI 중립 초안 집필 시작 🚀",
+                type="primary",
+                disabled=(bp is None),
+                use_container_width=True,
+                help="설계도를 먼저 생성해야 3단계로 진행할 수 있습니다." if bp is None else None,
+            ):
                 st.session_state["t2_step"] = 3
+                st.session_state["t2_synthesis_done"] = False
                 st.rerun()
 
     # Step 3: Synthesis & Real-time Progress
@@ -495,48 +551,93 @@ with tabs[1]:
 
         t_topic = st.session_state.get("t2_topic", "")
         t_dir = st.session_state.get("t2_direction", "")
-        c_seeds = st.session_state.get("t2_seeds", [])
+        c_seeds = st.session_state.get("t2_seeds") or []
         bp = st.session_state.get("t2_blueprint")
         arch_enum = st.session_state.get("t2_arch_enum")
         use_style = st.session_state.get("t2_use_style", False)
         active_prof = style_learner.get_active_profile() if use_style else None
+        curr_m = getattr(llm, "model", "Gemini")
 
-        prog_bar = st.progress(0.1, text="⏳ [1/3] 상호보완 Seed 원문 재료 탈색(Distillation) 진행 중...")
+        if not st.session_state.get("t2_synthesis_done", False):
+            prog_bar = st.progress(0.15, text="⏳ [1/3] 상호보완 Seed 원문 재료 탈색(Distillation) 진행 중...")
+            try:
+                # 1. Distillation
+                distilled_sheets = synthesizer.distiller.distill_all_sync(c_seeds)
+                prog_bar.progress(0.45, text=f"🤖 [2/3] {curr_m} 모델에 설계도와 재료를 전송하여 초안 본문 집필 중... (최대 30초 소요)")
 
-        # 1. Distillation
-        distilled_sheets = synthesizer.distiller.distill_all_sync(c_seeds)
-        prog_bar.progress(0.45, text="🤖 [2/3] LLM에 설계도와 재료를 전송하여 초안 본문 집필 중...")
+                # 2. Synthesis Call (pass approved blueprint & distilled_sheets directly)
+                out_file, content, blueprint, distilled = synthesizer.synthesize_sync(
+                    topic=t_topic,
+                    direction=t_dir,
+                    seeds=c_seeds,
+                    archetype=arch_enum,
+                    style_profile=active_prof,
+                    blueprint=bp,
+                    distilled_sheets=distilled_sheets,
+                )
+                prog_bar.progress(0.9, text="💾 [3/3] 초안 산출물 저장 및 스튜디오 카탈로그 등록 중...")
 
-        # 2. Synthesis Call
-        out_file, content, blueprint, distilled = synthesizer.synthesize_sync(
-            topic=t_topic,
-            direction=t_dir,
-            seeds=c_seeds,
-            archetype=arch_enum,
-            style_profile=active_prof,
-        )
-        prog_bar.progress(0.9, text="💾 [3/3] 초안 산출물 저장 및 스튜디오 카탈로그 등록 중...")
+                # Find the new creation_id
+                creations = repo.list_creations(limit=1)
+                new_id = creations[0]["creation_id"] if creations else None
+                st.session_state["active_creation_id"] = new_id
+                st.session_state["_loaded_cid"] = new_id
 
-        # Find the new creation_id
-        creations = repo.list_creations(limit=1)
-        new_id = creations[0]["creation_id"] if creations else None
-        st.session_state["active_creation_id"] = new_id
-        st.session_state["_loaded_cid"] = None
-        st.session_state["editor_text"] = content
-        st.session_state[f"editor_area_{new_id}"] = content
-        st.session_state[f"editor_area_side_{new_id}"] = content
+                # Split frontmatter immediately upon generation
+                fm, clean_body = ArticleProofreader.split_frontmatter(content)
+                st.session_state["editor_frontmatter"] = fm
+                st.session_state["editor_text"] = clean_body
+                if new_id:
+                    st.session_state[f"editor_area_{new_id}"] = clean_body
+                    st.session_state[f"editor_area_side_{new_id}"] = clean_body
 
-        prog_bar.progress(1.0, text="🎉 초안 생성이 성공적으로 완료되었습니다!")
+                st.session_state["t2_synthesis_done"] = True
+                st.session_state["t2_new_id"] = new_id
+                st.session_state["t2_out_file_name"] = out_file.name
+                st.session_state["t2_content_len"] = len(content)
 
-        st.success(f"**초안 생성 완료!** 파일: `{out_file.name}` (식별 ID: `{new_id}` / 본문 {len(content):,}자)")
-
-        c_go1, c_go2 = st.columns([2, 1])
-        with c_go1:
-            st.info("👉 상단 탭에서 **'🎨 3. Seed 뷰어 & 에디터'**를 클릭하면 생성된 초안이 즉시 로드되어 있으며, AI 수석 편집장의 첨삭과 라이트박스 이미지를 함께 보며 퇴고를 진행하실 수 있습니다!")
-        with c_go2:
-            if st.button("🔄 새로운 주제로 다시 시작", use_container_width=True):
-                st.session_state["t2_step"] = 1
+                prog_bar.progress(1.0, text="🎉 초안 생성이 성공적으로 완료되었습니다!")
+                import time
+                time.sleep(0.5)
                 st.rerun()
+
+            except Exception as e:
+                prog_bar.empty()
+                st.error(f"⚠️ 초안 집필 중 오류가 발생했습니다: {e}")
+                st.warning("Google Gemini API 통신 지연 또는 일시 혼잡일 수 있습니다. 사이드바에서 모델 설정을 점검하거나 다시 시도해 주세요.")
+                c_err1, c_err2 = st.columns([1, 1])
+                with c_err1:
+                    if st.button("🔄 초안 집필 다시 시도", type="primary", use_container_width=True):
+                        st.rerun()
+                with c_err2:
+                    if st.button("⬅️ 2단계 설계도 검토로 돌아가기", use_container_width=True):
+                        st.session_state["t2_step"] = 2
+                        st.rerun()
+
+        else:
+            out_name = st.session_state.get("t2_out_file_name", "draft.md")
+            new_id = st.session_state.get("t2_new_id", "cr_unknown")
+            c_len = st.session_state.get("t2_content_len", 0)
+
+            st.success(f"🎉 **초안 생성 완료!** 파일: `{out_name}` (식별 ID: `{new_id}` / 본문 {c_len:,}자)")
+
+            c_go1, c_go2, c_go3 = st.columns([2, 1, 1])
+            with c_go1:
+                st.info("👉 상단 탭에서 **'🎨 3. Seed 뷰어 & 에디터'**를 클릭하면 생성된 초안이 즉시 로드되어 있으며, AI 수석 편집장의 첨삭과 라이트박스 이미지를 함께 보며 퇴고를 진행하실 수 있습니다!")
+            with c_go2:
+                if st.button("⬅️ 2단계 설계도 보기", use_container_width=True):
+                    st.session_state["t2_step"] = 2
+                    st.rerun()
+            with c_go3:
+                if st.button("🔄 새로운 주제로 다시 시작", type="secondary", use_container_width=True):
+                    st.session_state["t2_step"] = 1
+                    st.session_state["t2_topic"] = ""
+                    st.session_state["t2_direction"] = ""
+                    st.session_state["t2_seeds"] = []
+                    st.session_state["t2_blueprint"] = None
+                    st.session_state["t2_synthesis_done"] = False
+                    st.session_state["active_creation_id"] = None
+                    st.rerun()
 
 # -------------------------------------------------------------
 # TAB 3: Seed 이미지 뷰어 & 마크다운 에디터 (Studio View)
@@ -545,11 +646,16 @@ with tabs[2]:
     st.header("3. Seed 원본 이미지 뷰어 & 마크다운 퇴고 스튜디오")
 
     all_creations = repo.list_creations(limit=30)
-    creation_options = {c["creation_id"]: f"[{c['status']}] {c['topic']} ({c['creation_id']})" for c in all_creations}
+    creation_options = {}
+    if st.session_state.get("t2_topic"):
+        t2_snippet = st.session_state["t2_topic"][:28] + ("..." if len(st.session_state["t2_topic"]) > 28 else "")
+        creation_options["_live_t2_draft"] = f"✨ [2번 탭 기획 주제] {t2_snippet}"
+    for c in all_creations:
+        creation_options[c["creation_id"]] = f"[{c['status']}] {c['topic']} ({c['creation_id']})"
 
     col_select1, col_select2 = st.columns([6, 4])
     with col_select1:
-        if all_creations:
+        if creation_options:
             c_keys = list(creation_options.keys())
             active_id = st.session_state.get("active_creation_id")
             default_index = c_keys.index(active_id) if active_id in c_keys else 0
@@ -576,10 +682,15 @@ with tabs[2]:
     seed_ids_to_show = []
     if standalone_seed != "(초안 연동)":
         seed_ids_to_show = [standalone_seed]
-    elif selected_cid:
+    elif selected_cid and selected_cid != "_live_t2_draft":
         creation_data = repo.get_creation(selected_cid)
         if creation_data:
             seed_ids_to_show = creation_data.get("seed_doc_ids", [])
+    elif selected_cid == "_live_t2_draft":
+        t2_seeds = st.session_state.get("t2_seeds") or []
+        seed_ids_to_show = [s.doc_id for s in t2_seeds if hasattr(s, "doc_id")]
+        if not seed_ids_to_show:
+            seed_ids_to_show = [a.doc_id for a in repo.list_articles()[:2]]
     else:
         # Default fallback to first 2 articles if no draft yet
         seed_ids_to_show = [a.doc_id for a in repo.list_articles()[:2]]
@@ -630,10 +741,23 @@ with tabs[2]:
         st.subheader("✍️ 마크다운 에디터 & 실시간 미리보기")
         
         # Load active text
-        if selected_cid:
+        creation = None
+        cur_topic = ""
+        cur_direction = ""
+        cur_blueprint = None
+
+        current_loaded = st.session_state.get("_loaded_cid")
+        if selected_cid and selected_cid != "_live_t2_draft":
             creation = repo.get_creation(selected_cid)
             if creation:
-                current_loaded = st.session_state.get("_loaded_cid")
+                cur_topic = creation.get("topic", "")
+                cur_direction = creation.get("direction", "")
+                bp_raw = creation.get("blueprint_json", "")
+                if bp_raw:
+                    try:
+                        cur_blueprint = json.loads(bp_raw)
+                    except Exception:
+                        pass
                 if current_loaded != selected_cid:
                     st.session_state["_loaded_cid"] = selected_cid
                     active_content = creation["user_final_text"] if creation["user_final_text"] else creation["ai_draft_text"]
@@ -643,9 +767,22 @@ with tabs[2]:
                     st.session_state["notes_text"] = creation.get("custom_notes", "")
                     st.session_state[f"editor_area_{selected_cid}"] = clean_body
                     st.session_state[f"editor_area_side_{selected_cid}"] = clean_body
+        else:
+            cur_topic = st.session_state.get("t2_topic", "")
+            cur_direction = st.session_state.get("t2_direction", "")
+            cur_blueprint = st.session_state.get("t2_blueprint")
+            if current_loaded != "_live_t2_draft":
+                st.session_state["_loaded_cid"] = "_live_t2_draft"
+                live_text = st.session_state.get("live_draft_text")
+                if not live_text:
+                    live_text = f"# {cur_topic}\n\n> 💡 **집필 의도**: {cur_direction}\n\n## 1. 들어가며\n\n여기에 본문 내용을 작성해 보세요."
+                st.session_state["editor_text"] = live_text
+                st.session_state["editor_frontmatter"] = f"---\ntopic: {json.dumps(cur_topic, ensure_ascii=False)}\ndirection: {json.dumps(cur_direction, ensure_ascii=False)}\nstatus: DRAFT\n---"
+                st.session_state["editor_area__live_t2_draft"] = live_text
+                st.session_state["editor_area_side__live_t2_draft"] = live_text
 
         # Safety: If editor_text currently has frontmatter in session state, split it automatically
-        if st.session_state.get("editor_text", "").startswith("---"):
+        if (st.session_state.get("editor_text") or "").startswith("---"):
             fm, cb = ArticleProofreader.split_frontmatter(st.session_state["editor_text"])
             if fm:
                 st.session_state["editor_frontmatter"] = fm
@@ -653,9 +790,35 @@ with tabs[2]:
                 st.session_state[f"editor_area_{selected_cid or 'default'}"] = cb
                 st.session_state[f"editor_area_side_{selected_cid or 'default'}"] = cb
 
-        # Metadata display card (isolated from body)
+        # Prominently Display Planning Brief (Topic, Context & Blueprint)
+        if cur_topic or cur_direction:
+            with st.container():
+                st.markdown(
+                    f"""
+                    <div style="background-color: rgba(30, 136, 229, 0.08); border-left: 4px solid #1E88E5; padding: 12px 16px; border-radius: 6px; margin-bottom: 12px;">
+                        <div style="font-size: 13px; font-weight: 700; color: #1565C0; margin-bottom: 4px;">🎯 타깃 주제 (Topic)</div>
+                        <div style="font-size: 15px; font-weight: 600; color: #111; margin-bottom: 8px;">{cur_topic or '미지정'}</div>
+                        <div style="font-size: 12px; font-weight: 700; color: #555; margin-bottom: 4px;">🧭 집필 방향 및 내 고유 관점 (Context)</div>
+                        <div style="font-size: 13px; color: #333; line-height: 1.5; white-space: pre-wrap;">{cur_direction or '미지정'}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            if cur_blueprint:
+                bp_title = cur_blueprint.get("proposed_title") if isinstance(cur_blueprint, dict) else getattr(cur_blueprint, "proposed_title", "")
+                bp_reframing = cur_blueprint.get("synthesized_reframing") if isinstance(cur_blueprint, dict) else getattr(cur_blueprint, "synthesized_reframing", "")
+                outline = cur_blueprint.get("section_outline", []) if isinstance(cur_blueprint, dict) else getattr(cur_blueprint, "section_outline", [])
+                with st.expander(f"🗺️ AI 융합 설계도 요약 (제안 제목: {bp_title})", expanded=False):
+                    if bp_reframing:
+                        st.markdown(f"**융합 관점 전환:** {bp_reframing}")
+                    if outline:
+                        st.markdown("**목차 아웃라인:**")
+                        for sec in outline:
+                            st.write(f"- {sec}")
+
+        # Metadata Raw YAML (Collapsible for verification)
         if st.session_state.get("editor_frontmatter"):
-            with st.expander("📌 기획 메타데이터 (주제, 방향성, Seed 정보 - AI 본문 첨삭 범위에서 자동 분리/보호됨)", expanded=False):
+            with st.expander("📌 원본 YAML 프론트매터 메타데이터 (발행 시 자동 보존)", expanded=False):
                 st.code(st.session_state["editor_frontmatter"], language="yaml")
 
         edit_mode = st.radio("보기 모드", ["에디터 (수정)", "실시간 미리보기", "나란히 보기"], horizontal=True)
@@ -669,6 +832,8 @@ with tabs[2]:
                 placeholder="2번 탭에서 초안을 생성하거나, 여기에 직접 새로운 글을 작성해 보세요.",
             )
             st.session_state["editor_text"] = edited_val
+            if selected_cid == "_live_t2_draft":
+                st.session_state["live_draft_text"] = edited_val
         elif edit_mode == "실시간 미리보기":
             if st.session_state.get("editor_text"):
                 st.markdown(st.session_state["editor_text"])
@@ -684,6 +849,8 @@ with tabs[2]:
                     key=f"editor_area_side_{selected_cid or 'default'}",
                 )
                 st.session_state["editor_text"] = edited_val
+                if selected_cid == "_live_t2_draft":
+                    st.session_state["live_draft_text"] = edited_val
             with c2:
                 if st.session_state.get("editor_text"):
                     st.markdown(st.session_state["editor_text"])
@@ -856,15 +1023,15 @@ with tabs[2]:
                     final_full_text = final_body
 
                 target_id = selected_cid
-                if not target_id:
+                if not target_id or target_id == "_live_t2_draft":
                     # Create a new creation entry if saved without generator
                     import datetime
                     now_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                     target_id = f"cr_{now_str}"
                     repo.save_draft_creation(
                         creation_id=target_id,
-                        topic="직접 작성한 새 글",
-                        direction="",
+                        topic=cur_topic or "직접 작성한 새 글",
+                        direction=cur_direction or "",
                         target_archetype="custom",
                         seed_doc_ids=seed_ids_to_show,
                         blueprint_json="{}",
@@ -888,7 +1055,7 @@ with tabs[2]:
                 st.rerun()
 
         with col_save2:
-            if selected_cid and creation:
+            if selected_cid and selected_cid != "_live_t2_draft" and creation:
                 current_status = creation["status"]
                 st.metric("현재 문서 상태", current_status)
             else:
@@ -928,12 +1095,16 @@ with tabs[3]:
 
         if learn_btn:
             with st.spinner("AI 초안과 사용자 수정본의 Diff 쌍을 분석하여 스타일 프로필 추출 중..."):
-                learned_profile = style_learner.learn_style_sync(min_count=5, force=force_learning)
-                if learned_profile:
-                    st.success(f"축하합니다! 나만의 스타일 프로필(v{learned_profile.profile_version}) 추출이 완료되었습니다.")
-                    st.rerun()
-                else:
-                    st.warning("스타일 학습을 위한 확정된 결과물이 부족합니다. 초안을 수정한 뒤 [나의 결과물로 확정 저장]을 완료해주세요.")
+                try:
+                    learned_profile = style_learner.learn_style_sync(min_count=5, force=force_learning)
+                    if learned_profile:
+                        st.success(f"축하합니다! 나만의 스타일 프로필(v{learned_profile.profile_version}) 추출이 완료되었습니다.")
+                        st.rerun()
+                    else:
+                        st.warning("스타일 학습을 위한 확정된 결과물이 부족합니다. 초안을 수정한 뒤 [나의 결과물로 확정 저장]을 완료해주세요.")
+                except Exception as e:
+                    st.error(f"⚠️ 스타일 프로필 추출 중 오류가 발생했습니다: {e}")
+                    st.info("💡 Google Gemini API 서버가 일시적인 고부하(503) 상태일 수 있습니다. 잠시 후 [나만의 문체 스타일 추출/갱신하기] 버튼을 다시 눌러주세요.")
 
     # Display active style profile if exists
     active_prof = style_learner.get_active_profile()

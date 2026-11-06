@@ -1,10 +1,38 @@
 """Configuration loader for the pipeline."""
 
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-import os
 import yaml
 from pydantic import BaseModel, Field
+
+
+def load_env_file(env_path: Optional[Path] = None):
+    """Load variables from .env file into os.environ if not already set."""
+    candidates = [
+        env_path,
+        Path(".env"),
+        Path(__file__).resolve().parent.parent / ".env",
+        Path.home() / "pactory_contents" / ".env",
+    ]
+    for p in candidates:
+        if p and p.exists() and p.is_file():
+            try:
+                for line in p.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        k = k.strip()
+                        v = v.strip().strip("'").strip('"')
+                        if k not in os.environ or not os.environ[k]:
+                            os.environ[k] = v
+                break
+            except Exception:
+                pass
+
+
+# Auto-load on import
+load_env_file()
 
 
 class PathSettings(BaseModel):

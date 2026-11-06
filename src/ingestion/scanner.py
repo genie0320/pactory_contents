@@ -121,6 +121,11 @@ class IngestionScanner:
         # Check duplication in database
         existing = self.repo.get_article_by_hash(content_hash)
         if existing and not force:
+            if move_archive:
+                try:
+                    file_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
             return existing
 
         filename = file_path.name

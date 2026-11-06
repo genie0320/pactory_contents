@@ -66,6 +66,8 @@ class ArticleSynthesizer:
         archetype: Optional[ArticleArchetype] = None,
         style_profile: Optional[UserStyleProfile] = None,
         output_dir: Optional[Path] = None,
+        blueprint: Optional[SynthesisBlueprint] = None,
+        distilled_sheets: Optional[List[DistilledMaterialSheet]] = None,
     ) -> Tuple[Path, str, SynthesisBlueprint, List[DistilledMaterialSheet]]:
         """
         v2.0 3-Stage Synthesis Pipeline:
@@ -76,16 +78,18 @@ class ArticleSynthesizer:
         out_dir = Path(output_dir) if output_dir else self.outputs_dir
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        # 1. Blueprint Planning
-        blueprint = await self.planner.plan_blueprint(
-            topic=topic,
-            direction=direction,
-            seeds=seeds,
-            archetype=archetype,
-        )
+        # 1. Blueprint Planning (reuse if already provided)
+        if blueprint is None:
+            blueprint = await self.planner.plan_blueprint(
+                topic=topic,
+                direction=direction,
+                seeds=seeds,
+                archetype=archetype,
+            )
 
         # 2. Material Distillation (Raw text is NEVER passed to final writer)
-        distilled_sheets = await self.distiller.distill_all(seeds)
+        if distilled_sheets is None:
+            distilled_sheets = await self.distiller.distill_all(seeds)
 
         # 3. Call LLM for neutral/styled synthesis
         style_guide_text = (
@@ -180,21 +184,25 @@ class ArticleSynthesizer:
         archetype: Optional[ArticleArchetype] = None,
         style_profile: Optional[UserStyleProfile] = None,
         output_dir: Optional[Path] = None,
+        blueprint: Optional[SynthesisBlueprint] = None,
+        distilled_sheets: Optional[List[DistilledMaterialSheet]] = None,
     ) -> Tuple[Path, str, SynthesisBlueprint, List[DistilledMaterialSheet]]:
         """Synchronous version for offline/sandbox mode."""
         out_dir = Path(output_dir) if output_dir else self.outputs_dir
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        # 1. Blueprint Planning
-        blueprint = self.planner.plan_blueprint_sync(
-            topic=topic,
-            direction=direction,
-            seeds=seeds,
-            archetype=archetype,
-        )
+        # 1. Blueprint Planning (reuse if already provided)
+        if blueprint is None:
+            blueprint = self.planner.plan_blueprint_sync(
+                topic=topic,
+                direction=direction,
+                seeds=seeds,
+                archetype=archetype,
+            )
 
-        # 2. Material Distillation
-        distilled_sheets = self.distiller.distill_all_sync(seeds)
+        # 2. Material Distillation (reuse if already provided)
+        if distilled_sheets is None:
+            distilled_sheets = self.distiller.distill_all_sync(seeds)
 
         # 3. Call LLM for neutral/styled synthesis
         style_guide_text = (

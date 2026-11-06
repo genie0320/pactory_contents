@@ -5,8 +5,10 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=%h/pactory_contents
+EnvironmentFile=%h/pactory_contents/.env
 Environment="PATH=%h/pactory_contents/.venv/bin:/usr/local/bin:/usr/bin:/bin"
-ExecStart=%h/pactory_contents/.venv/bin/streamlit run src/ui/app.py --server.port 8501 --server.address 0.0.0.0 --server.headless true --browser.gatherUsageStats false
+Environment="PYTHONPATH=%h/pactory_contents"
+ExecStart=%h/pactory_contents/.venv/bin/streamlit run src/ui/app.py --server.port 8501 --server.address 0.0.0.0 --server.headless true --browser.gatherUsageStats false --server.fileWatcherType none
 Restart=always
 RestartSec=5
 
