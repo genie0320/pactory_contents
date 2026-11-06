@@ -49,3 +49,8 @@ data/archive/*
 data/index/
 data/my_corpus/
 !data/my_corpus/.gitkeep
+
+# Personal home server & local deployment scripts
+server.md
+send_to_server.bat
+send_to_server.ps1
