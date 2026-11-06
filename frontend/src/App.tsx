@@ -21,8 +21,19 @@ export function App() {
     const handleUnauthorized = () => {
       setIsAuthOpen(true);
     };
+    const handleNavigate = (e: Event) => {
+      const customEvent = e as CustomEvent<NavTab>;
+      if (customEvent.detail) {
+        setCurrentTab(customEvent.detail);
+      }
+    };
+
     window.addEventListener('pactory:unauthorized', handleUnauthorized);
-    return () => window.removeEventListener('pactory:unauthorized', handleUnauthorized);
+    window.addEventListener('pactory:navigate', handleNavigate);
+    return () => {
+      window.removeEventListener('pactory:unauthorized', handleUnauthorized);
+      window.removeEventListener('pactory:navigate', handleNavigate);
+    };
   }, []);
 
   const handleOpenEditor = (creationId?: string, initialDraft?: string, topic?: string) => {

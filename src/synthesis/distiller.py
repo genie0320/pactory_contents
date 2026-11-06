@@ -1,6 +1,6 @@
 """Material distiller: strips style and rhetoric from Seed articles into pure fact sheets."""
 
-from typing import List, Optional
+
 from src.extraction.llm_client import LLMClient
 from src.extraction.prompts import (
     MATERIAL_DISTILLATION_SYSTEM_PROMPT,
@@ -15,8 +15,8 @@ class MaterialDistiller:
 
     def __init__(
         self,
-        repo: Optional[StorageRepository] = None,
-        llm_client: Optional[LLMClient] = None,
+        repo: StorageRepository | None = None,
+        llm_client: LLMClient | None = None,
     ):
         self.repo = repo
         self.llm_client = llm_client or LLMClient()
@@ -73,10 +73,10 @@ class MaterialDistiller:
 
     async def distill_all(
         self,
-        seeds: List[SeedRoleAssignment],
-    ) -> List[DistilledMaterialSheet]:
+        seeds: list[SeedRoleAssignment],
+    ) -> list[DistilledMaterialSheet]:
         """Distill all selected seeds asynchronously."""
-        sheets: List[DistilledMaterialSheet] = []
+        sheets: list[DistilledMaterialSheet] = []
         for s in seeds:
             sheet = await self.distill_seed(s)
             sheets.append(sheet)
@@ -84,10 +84,10 @@ class MaterialDistiller:
 
     def distill_all_sync(
         self,
-        seeds: List[SeedRoleAssignment],
-    ) -> List[DistilledMaterialSheet]:
+        seeds: list[SeedRoleAssignment],
+    ) -> list[DistilledMaterialSheet]:
         """Distill all selected seeds synchronously."""
-        sheets: List[DistilledMaterialSheet] = []
+        sheets: list[DistilledMaterialSheet] = []
         for s in seeds:
             sheet = self.distill_seed_sync(s)
             sheets.append(sheet)

@@ -4,7 +4,7 @@ Protects endpoints with STUDIO_PASSWORD or Bearer token when configured.
 """
 
 import os
-from typing import Optional
+
 from fastapi import Header, HTTPException, status
 from pydantic import BaseModel
 
@@ -24,8 +24,8 @@ def get_configured_password() -> str:
 
 
 async def verify_auth(
-    x_studio_password: Optional[str] = Header(None, alias="x-studio-password"),
-    authorization: Optional[str] = Header(None),
+    x_studio_password: str | None = Header(None, alias="x-studio-password"),
+    authorization: str | None = Header(None),
 ) -> bool:
     """FastAPI dependency to verify request authorization."""
     configured_pwd = get_configured_password()

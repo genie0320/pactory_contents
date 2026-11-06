@@ -2,9 +2,9 @@
 
 import json
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import List, Optional, Tuple
+
 import yaml
 
 from src.config import AppConfig, load_config
@@ -54,11 +54,11 @@ class ArticleSynthesizer:
 
     def __init__(
         self,
-        config: Optional[AppConfig] = None,
-        repo: Optional[StorageRepository] = None,
-        llm_client: Optional[LLMClient] = None,
-        planner: Optional[SynthesisPlanner] = None,
-        distiller: Optional[MaterialDistiller] = None,
+        config: AppConfig | None = None,
+        repo: StorageRepository | None = None,
+        llm_client: LLMClient | None = None,
+        planner: SynthesisPlanner | None = None,
+        distiller: MaterialDistiller | None = None,
     ):
         self.config = config or load_config()
         self.repo = repo or StorageRepository(
@@ -72,6 +72,7 @@ class ArticleSynthesizer:
         self.drafts_dir = self.config.paths.data_dir / "drafts"
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
         self.drafts_dir.mkdir(parents=True, exist_ok=True)
+        self.last_creation_id: str = ""
 
     @staticmethod
     def slugify(text: str) -> str:
@@ -86,13 +87,13 @@ class ArticleSynthesizer:
         self,
         topic: str,
         direction: str,
-        seeds: List[SeedRoleAssignment],
-        archetype: Optional[ArticleArchetype] = None,
-        style_profile: Optional[UserStyleProfile] = None,
-        output_dir: Optional[Path] = None,
-        blueprint: Optional[SynthesisBlueprint] = None,
-        distilled_sheets: Optional[List[DistilledMaterialSheet]] = None,
-    ) -> Tuple[Path, str, SynthesisBlueprint, List[DistilledMaterialSheet]]:
+        seeds: list[SeedRoleAssignment],
+        archetype: ArticleArchetype | None = None,
+        style_profile: UserStyleProfile | None = None,
+        output_dir: Path | None = None,
+        blueprint: SynthesisBlueprint | None = None,
+        distilled_sheets: list[DistilledMaterialSheet] | None = None,
+    ) -> tuple[Path, str, SynthesisBlueprint, list[DistilledMaterialSheet]]:
         """
         v2.0 3-Stage Synthesis Pipeline:
         1. Plan blueprint from metadata
@@ -138,7 +139,7 @@ class ArticleSynthesizer:
         )
 
         # 4. Frontmatter
-        now_utc = datetime.now(timezone.utc)
+        now_utc = datetime.now(UTC)
         frontmatter_data = {
             "title": blueprint.proposed_title,
             "topic": topic,
@@ -166,18 +167,15 @@ class ArticleSynthesizer:
         yaml_str = dump_clean_yaml(frontmatter_data)
         final_markdown = f"---\n{yaml_str}---\n\n{final_body}\n"
 
-        # 5. Output file
+        # 5. Output file (Single Source of Truth in outputs_dir)
         timestamp_str = now_utc.strftime("%Y%m%d_%H%M%S")
+        creation_id = f"cr_{timestamp_str}"
+        self.last_creation_id = creation_id
         topic_slug = self.slugify(topic)
-        output_file = out_dir / f"{timestamp_str}_{topic_slug}.md"
+        output_file = out_dir / f"{creation_id}_{topic_slug}.md"
         output_file.write_text(final_markdown, encoding="utf-8")
 
-        # Also store copy in drafts/
-        draft_file = self.drafts_dir / f"draft_{timestamp_str}.md"
-        draft_file.write_text(final_markdown, encoding="utf-8")
-
         # 6. Save creation record to drafts_and_creations table
-        creation_id = f"cr_{timestamp_str}"
         self.repo.save_draft_creation(
             creation_id=creation_id,
             topic=topic,
@@ -204,13 +202,13 @@ class ArticleSynthesizer:
         self,
         topic: str,
         direction: str,
-        seeds: List[SeedRoleAssignment],
-        archetype: Optional[ArticleArchetype] = None,
-        style_profile: Optional[UserStyleProfile] = None,
-        output_dir: Optional[Path] = None,
-        blueprint: Optional[SynthesisBlueprint] = None,
-        distilled_sheets: Optional[List[DistilledMaterialSheet]] = None,
-    ) -> Tuple[Path, str, SynthesisBlueprint, List[DistilledMaterialSheet]]:
+        seeds: list[SeedRoleAssignment],
+        archetype: ArticleArchetype | None = None,
+        style_profile: UserStyleProfile | None = None,
+        output_dir: Path | None = None,
+        blueprint: SynthesisBlueprint | None = None,
+        distilled_sheets: list[DistilledMaterialSheet] | None = None,
+    ) -> tuple[Path, str, SynthesisBlueprint, list[DistilledMaterialSheet]]:
         """Synchronous version for offline/sandbox mode."""
         out_dir = Path(output_dir) if output_dir else self.outputs_dir
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -251,7 +249,7 @@ class ArticleSynthesizer:
         )
 
         # 4. Frontmatter
-        now_utc = datetime.now(timezone.utc)
+        now_utc = datetime.now(UTC)
         frontmatter_data = {
             "title": blueprint.proposed_title,
             "topic": topic,
@@ -279,17 +277,15 @@ class ArticleSynthesizer:
         yaml_str = dump_clean_yaml(frontmatter_data)
         final_markdown = f"---\n{yaml_str}---\n\n{final_body}\n"
 
-        # 5. Output file
+        # 5. Output file (Single Source of Truth in outputs_dir)
         timestamp_str = now_utc.strftime("%Y%m%d_%H%M%S")
+        creation_id = f"cr_{timestamp_str}"
+        self.last_creation_id = creation_id
         topic_slug = self.slugify(topic)
-        output_file = out_dir / f"{timestamp_str}_{topic_slug}.md"
+        output_file = out_dir / f"{creation_id}_{topic_slug}.md"
         output_file.write_text(final_markdown, encoding="utf-8")
 
-        draft_file = self.drafts_dir / f"draft_{timestamp_str}.md"
-        draft_file.write_text(final_markdown, encoding="utf-8")
-
         # 6. Save creation record to drafts_and_creations table
-        creation_id = f"cr_{timestamp_str}"
         self.repo.save_draft_creation(
             creation_id=creation_id,
             topic=topic,

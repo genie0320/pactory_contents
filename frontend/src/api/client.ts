@@ -7,11 +7,14 @@ const api = axios.create({
   },
 });
 
-// Request interceptor to attach studio password header
+// Request interceptor to attach studio password header and handle FormData
 api.interceptors.request.use((config) => {
   const pwd = localStorage.getItem('pactory_studio_password');
   if (pwd) {
     config.headers['x-studio-password'] = pwd;
+  }
+  if (config.data instanceof FormData) {
+    delete config.headers['Content-Type'];
   }
   return config;
 });
@@ -63,16 +66,82 @@ export interface ArticleSummaryItem {
   char_count: number;
   image_count: number;
   status: string;
+  primary_category?: string;
+  article_archetype?: string;
+  core_thesis?: string;
+  reusable_asset_types?: string[];
+  target_audience?: string;
+  core_problem?: string;
+  reframing_logic?: string;
+  hook_strategy?: string;
+  solution_framework?: string[];
+  notable_episodes?: string[];
+  topic_tags?: string[];
   ingested_at?: string;
   indexed_at?: string;
 }
 
+export interface VisualAssetItem {
+  doc_id?: string;
+  doc_title?: string;
+  asset_id: string;
+  asset_type?: string;
+  page_no?: number;
+  file_path: string;
+  image_url?: string;
+  width?: number;
+  height?: number;
+  caption?: string;
+}
+
+export interface ArticleDetailResponse {
+  article: ArticleSummaryItem;
+  visual_assets: VisualAssetItem[];
+  preview_text: string;
+  full_text?: string;
+}
+
+export interface JobStatusResponse {
+  job_id: string;
+  job_type: string;
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'PARTIAL_SUCCESS' | 'FAILED';
+  total_items: number;
+  processed_items: number;
+  failed_items: number;
+  current_doc_id: string;
+  log_summary: string;
+  started_at: string;
+  updated_at: string;
+  completed_at?: string;
+}
+
+export interface InboxProcessResponse {
+  processed_count: number;
+  indexed_count: number;
+  skipped_count: number;
+  job_id?: string;
+  status: string;
+  message: string;
+}
+
 export const inboxApi = {
   scan: () => api.get<InboxScanResponse>('/api/inbox/scan').then((r) => r.data),
-  process: (force = false, moveArchive = false) =>
-    api.post('/api/inbox/process', { force, move_archive: moveArchive }).then((r) => r.data),
+  uploadFiles: (files: File[]) => {
+    const formData = new FormData();
+    files.forEach((f) => formData.append('files', f));
+    return api.post<{ uploaded_count: number; saved_files: string[]; message: string }>(
+      '/api/inbox/upload',
+      formData
+    ).then((r) => r.data);
+  },
+  process: (force = false, moveArchive = true) =>
+    api.post<InboxProcessResponse>('/api/inbox/process', { force, move_archive: moveArchive }).then((r) => r.data),
+  getActiveJob: () => api.get<JobStatusResponse | null>('/api/inbox/jobs/active').then((r) => r.data),
+  getJobStatus: (jobId: string) => api.get<JobStatusResponse>(`/api/inbox/jobs/${jobId}`).then((r) => r.data),
   listArticles: (limit = 50, status?: string) =>
     api.get<{ total: number; items: ArticleSummaryItem[] }>('/api/inbox/articles', { params: { limit, status } }).then((r) => r.data),
+  getArticleDetail: (docId: string) =>
+    api.get<ArticleDetailResponse>(`/api/inbox/articles/${docId}`).then((r) => r.data),
   getStats: () => api.get('/api/inbox/stats').then((r) => r.data),
 };
 
@@ -110,7 +179,23 @@ export interface DraftSynthesizeResponse {
   creation_id?: string;
 }
 
+export interface RandomInspirationResponse {
+  topic: string;
+  direction: string;
+  target_archetype: string;
+  concept_summary: string;
+  selected_seeds: SeedCandidateItem[];
+}
+
 export const draftApi = {
+  getRandomInspiration: (preferred_category?: string, count = 3, model?: string) =>
+    api
+      .post<RandomInspirationResponse>('/api/draft/random-inspiration', {
+        preferred_category,
+        count,
+        model,
+      })
+      .then((r) => r.data),
   searchSeeds: (topic: string, direction = '', limit = 10) =>
     api
       .post<{ topic: string; direction: string; total_found: number; candidates: SeedCandidateItem[] }>(
@@ -118,13 +203,20 @@ export const draftApi = {
         { topic, direction, limit }
       )
       .then((r) => r.data),
-  generateBlueprint: (topic: string, direction = '', archetype = 'PRACTICAL_GUIDE', selected_seed_ids: string[] = []) =>
+  generateBlueprint: (
+    topic: string,
+    direction = '',
+    archetype = 'PRACTICAL_GUIDE',
+    selected_seed_ids: string[] = [],
+    model?: string
+  ) =>
     api
       .post<BlueprintResponse>('/api/draft/blueprint', {
         topic,
         direction,
         target_archetype: archetype,
         selected_seed_ids,
+        model,
       })
       .then((r) => r.data),
   synthesize: (
@@ -133,7 +225,8 @@ export const draftApi = {
     archetype = 'PRACTICAL_GUIDE',
     selected_seed_ids: string[] = [],
     blueprint: any = {},
-    target_length = 2500
+    target_length = 2500,
+    model?: string
   ) =>
     api
       .post<DraftSynthesizeResponse>('/api/draft/synthesize', {
@@ -143,8 +236,15 @@ export const draftApi = {
         selected_seed_ids,
         blueprint,
         target_length,
+        model,
       })
       .then((r) => r.data),
+  getSeedAssets: (seedIds: string[]) =>
+    api
+      .get<{ total: number; assets: VisualAssetItem[] }>(`/api/draft/assets?seed_ids=${seedIds.join(',')}`)
+      .then((r) => r.data),
+  getSeedDetail: (docId: string) =>
+    api.get<ArticleDetailResponse>(`/api/draft/seeds/${docId}`).then((r) => r.data),
 };
 
 export interface CreationSummaryItem {
@@ -200,7 +300,10 @@ export const editorApi = {
     custom_instruction?: string;
     critique_feedback?: string;
     metadata_context?: string;
+    model?: string;
   }) => api.post<ProofreadResponse>('/api/proofread', payload).then((r) => r.data),
+  getCreationAssets: (creationId: string) =>
+    api.get<{ total: number; assets: VisualAssetItem[] }>(`/api/creations/${creationId}/assets`).then((r) => r.data),
 };
 
 export interface StyleProfileResponse {
@@ -216,9 +319,11 @@ export interface StyleProfileResponse {
 export const styleApi = {
   getStyle: () => api.get<StyleProfileResponse>('/api/style').then((r) => r.data),
   updateStyle: (profile_data: any) => api.put<StyleProfileResponse>('/api/style', { profile_data }).then((r) => r.data),
-  learnStyle: (min_finalized_count = 3) =>
+  learnStyle: (min_finalized_count = 1, force = false, window_size = 10) =>
     api.post<{ success: boolean; learned_creations_count: number; updated_profile: any; message: string }>('/api/style/learn', {
       min_finalized_count,
+      force,
+      window_size,
     }).then((r) => r.data),
 };
 

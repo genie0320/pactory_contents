@@ -1,16 +1,13 @@
 """Tests for Milestone 7: Style Learner and Style Learning Loop."""
 
-import json
 from pathlib import Path
+
 import pytest
 
 from src.config import AppConfig, PathSettings
-from src.extraction.llm_client import LLMClient
 from src.models import (
     ArticleArchetype,
     ArticleMetadata,
-    ArticleRecord,
-    ArticleStatus,
     ReusableAssetType,
     SeedRoleAssignment,
     UserStyleProfile,
@@ -22,7 +19,7 @@ from src.synthesis.synthesizer import ArticleSynthesizer
 
 
 @pytest.fixture
-def style_env(tmp_path: Path):
+def style_env(tmp_path: Path, mock_llm_client):
     db_path = tmp_path / "index" / "catalog.db"
     processed_dir = tmp_path / "processed"
     init_db(db_path)
@@ -43,7 +40,7 @@ def style_env(tmp_path: Path):
     )
     config.ensure_directories()
     repo = StorageRepository(db_path=db_path, processed_dir=processed_dir)
-    llm = LLMClient()
+    llm = mock_llm_client
     learner = StyleLearner(config=config, repo=repo, llm_client=llm)
     synthesizer = ArticleSynthesizer(config=config, repo=repo, llm_client=llm)
     return repo, learner, synthesizer, config

@@ -234,15 +234,16 @@ def cmd_learn_style(
 
 
 @app.command("ui")
+@app.command("server")
 def cmd_ui(
-    port: int = typer.Option(8501, "--port", "-p", help="Port for Streamlit Web Studio"),
-    config_file: Optional[Path] = typer.Option(None, "--config", "-c", help="Path to config.yaml"),
+    host: str = typer.Option("127.0.0.1", "--host", "-h", help="Bind host address"),
+    port: int = typer.Option(8501, "--port", "-p", help="Port for Web Studio"),
+    reload: bool = typer.Option(False, "--reload", "-r", help="Enable auto-reload for development"),
 ):
-    """Launch the 4-Tab Streamlit Web Studio UI."""
-    import subprocess
-    console.print(f"[bold cyan]Launching Seed Studio UI on http://localhost:{port}...[/bold cyan]")
-    cmd = [sys.executable, "-m", "streamlit", "run", "src/ui/app.py", "--server.port", str(port)]
-    subprocess.run(cmd)
+    """Launch the FastAPI + React Web Studio application."""
+    import uvicorn
+    console.print(f"[bold cyan]Launching Seed Studio Web App on http://{host}:{port}...[/bold cyan]")
+    uvicorn.run("src.api.main:app", host=host, port=port, reload=reload)
 
 
 @app.command("pipeline")
@@ -271,6 +272,40 @@ def cmd_pipeline(
         output_dir=output_dir,
         config_file=config_file,
     )
+
+
+@app.command("check")
+def cmd_check(
+    fix: bool = typer.Option(False, "--fix", "-f", help="Automatically fix backend lint issues"),
+):
+    """Run full quality gate: backend lint (Ruff), frontend lint (oxlint), and parallel test suite."""
+    import subprocess
+
+    console.print("[bold cyan]>> 1. Running backend lint with Ruff...[/bold cyan]")
+    ruff_args = [sys.executable, "-m", "ruff", "check", "src", "tests"]
+    if fix:
+        ruff_args.append("--fix")
+    res_ruff = subprocess.run(ruff_args)
+    if res_ruff.returncode != 0 and not fix:
+        console.print("[yellow]Hint: Run 'python run.py check --fix' to auto-resolve fixable issues.[/yellow]")
+
+    console.print("\n[bold cyan]>> 2. Running frontend lint with oxlint...[/bold cyan]")
+    subprocess.run(["npm", "--prefix", "frontend", "run", "lint"], shell=True)
+
+    console.print("\n[bold cyan]>> 3. Running parallel pytest suite...[/bold cyan]")
+    subprocess.run([sys.executable, "-m", "pytest"])
+
+
+@app.command("test")
+def cmd_test(
+    k: Optional[str] = typer.Option(None, "-k", help="Filter tests by expression"),
+):
+    """Run parallelized automated pytest suite."""
+    import subprocess
+    cmd = [sys.executable, "-m", "pytest"]
+    if k:
+        cmd.extend(["-k", k])
+    subprocess.run(cmd)
 
 
 if __name__ == "__main__":

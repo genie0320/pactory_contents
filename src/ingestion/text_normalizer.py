@@ -1,7 +1,6 @@
 """Text normalization and boilerplate removal for articles."""
 
 import re
-from typing import Optional, Tuple
 
 # Patterns for boilerplate removal
 BOILERPLATE_PATTERNS = [
@@ -38,7 +37,7 @@ def clean_boilerplate(text: str) -> str:
     return cleaned.strip()
 
 
-def extract_author_and_date(text: str) -> Tuple[str, str]:
+def extract_author_and_date(text: str) -> tuple[str, str]:
     """Extract author and published date from header text."""
     author = ""
     published_date = ""
@@ -67,7 +66,7 @@ def extract_author_and_date(text: str) -> Tuple[str, str]:
     return author, published_date
 
 
-def normalize_markdown(raw_content: str, fallback_title: str = "") -> Tuple[str, str, str, str]:
+def normalize_markdown(raw_content: str, fallback_title: str = "") -> tuple[str, str, str, str]:
     """
     Normalize raw markdown/text into clean markdown.
     Returns (cleaned_text, title, author, published_date).

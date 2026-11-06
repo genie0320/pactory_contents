@@ -1,10 +1,9 @@
 """Integration tests for Pactory Studio FastAPI REST API."""
 
-import json
-import os
-from unittest.mock import AsyncMock, MagicMock, patch
-import pytest
+from unittest.mock import patch
+
 from fastapi.testclient import TestClient
+
 from src.api.auth import get_configured_password
 from src.api.main import app
 
@@ -66,9 +65,48 @@ def test_inbox_endpoints():
     assert "total" in articles
     assert "items" in articles
 
+    # Upload
+    upload_resp = client.post(
+        "/api/inbox/upload",
+        files=[("files", ("test_upload.md", b"# Test Upload Article\nContent", "text/markdown"))],
+        headers=AUTH_HEADERS,
+    )
+    assert upload_resp.status_code == 200
+    upload_data = upload_resp.json()
+    assert upload_data["uploaded_count"] == 1
+    assert "test_upload.md" in upload_data["saved_files"]
 
-def test_seed_search_endpoint():
+
+@patch("src.storage.retriever.SeedRetriever.retrieve_seeds")
+@patch("src.storage.retriever.SeedRetriever.search_candidates")
+def test_seed_search_endpoint(mock_search, mock_retrieve):
     """Verify draft seed candidate search."""
+    from src.models import ArticleArchetype, ArticleMetadata, ArticleRecord
+    meta = ArticleMetadata(
+        target_audience="실무 기획자",
+        core_problem="기획 실행력 부족",
+        reframing_logic="마찰 최소화",
+        core_thesis="빠른 프로토타이핑",
+        article_archetype=ArticleArchetype.STEP_BY_STEP_TUTORIAL,
+        hook_strategy="실화 기반",
+        solution_framework=["1단계", "2단계"],
+        notable_episodes=["성공 에피소드"],
+        reusable_asset_types=[],
+        primary_category="서비스기획/AI",
+        topic_tags=["기획", "AI", "자동화"],
+    )
+    art = ArticleRecord(
+        doc_id="test_seed_doc",
+        title="비즈니스 기획 실전",
+        source_format="md",
+        original_path="archive/test.md",
+        processed_text_path="processed/texts/test.md",
+        content_hash="hash_test",
+        char_count=500,
+    )
+    mock_search.return_value = [(art, meta, 0.95)]
+    mock_retrieve.return_value = []
+
     resp = client.post(
         "/api/draft/seeds",
         json={"topic": "비즈니스 기획", "direction": "실무 실행력 강화", "limit": 5},
@@ -78,6 +116,8 @@ def test_seed_search_endpoint():
     data = resp.json()
     assert data["topic"] == "비즈니스 기획"
     assert "candidates" in data
+    assert len(data["candidates"]) == 1
+    assert data["candidates"][0]["doc_id"] == "test_seed_doc"
 
 
 @patch("src.storage.retriever.SeedRetriever.retrieve_seeds")
@@ -134,6 +174,7 @@ def test_blueprint_generation_endpoint(mock_plan, mock_retrieve):
 def test_synthesize_endpoint(mock_synth, mock_retrieve):
     """Verify draft synthesis endpoint returns full draft and creation id."""
     from pathlib import Path
+
     from src.models import (
         ArticleArchetype,
         ArticleMetadata,
@@ -183,6 +224,46 @@ def test_synthesize_endpoint(mock_synth, mock_retrieve):
     data = resp.json()
     assert data["title"] == "테스트 초안 제목"
     assert "creation_id" in data
+
+
+@patch("src.synthesis.inspirator.RandomIdeaInspirator.generate_random_inspiration")
+def test_random_inspiration_endpoint(mock_insp):
+    """Verify random inspiration endpoint returns synthesized topic, direction, and seeds."""
+    from src.api.schemas.generator import SeedCandidateItem
+
+    mock_insp.return_value = {
+        "topic": "크로스 도메인 융합 주제",
+        "direction": "융합 집필 방향",
+        "target_archetype": "PRACTICAL_GUIDE",
+        "concept_summary": "두 도메인의 결합으로 새로운 시너지 창출",
+        "selected_seeds": [
+            SeedCandidateItem(
+                doc_id="doc1",
+                title="시드 제목 1",
+                archetype="step_by_step_tutorial",
+                target_audience="독자",
+                core_thesis="테제 1",
+                solution_framework=["해결 1"],
+                notable_episodes=["에피소드 1"],
+                topic_tags=["태그1"],
+                relevance_score=1.0,
+                assigned_role="domain_case",
+            )
+        ],
+    }
+
+    resp = client.post(
+        "/api/draft/random-inspiration",
+        json={"preferred_category": None, "count": 3},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["topic"] == "크로스 도메인 융합 주제"
+    assert data["direction"] == "융합 집필 방향"
+    assert len(data["selected_seeds"]) == 1
+    assert data["selected_seeds"][0]["doc_id"] == "doc1"
+
 
 
 

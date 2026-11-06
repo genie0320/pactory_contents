@@ -1,13 +1,15 @@
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
+
 from src.exceptions import LLMServiceError
 from src.extraction.llm_client import LLMClient
 from src.synthesis.proofreader import ArticleProofreader
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "mock_proofreader_payload.json"
-with open(FIXTURE_PATH, "r", encoding="utf-8") as f:
+with open(FIXTURE_PATH, encoding="utf-8") as f:
     FIXTURES = json.load(f)
 
 SAMPLE_TEXT = """# 실전 비즈니스 기획의 본질
@@ -91,18 +93,17 @@ def test_proofreader_rewrite_mode_with_mock():
     mock_llm.generate_text_sync.assert_called_once()
 
 
-def test_proofreader_async_review():
-    import asyncio
+async def test_proofreader_async_review():
     mock_llm = MagicMock(spec=LLMClient)
     mock_llm.api_key = "fake-key"
     mock_llm.generate_text = AsyncMock(return_value=FIXTURES["sample_rewrite_threads"])
 
     proofreader = ArticleProofreader(llm_client=mock_llm)
-    res = asyncio.run(proofreader.review(
+    res = await proofreader.review(
         content=SAMPLE_TEXT,
         platform="threads",
         mode="rewrite",
-    ))
+    )
 
     assert res["platform"] == "threads"
     assert res["mode"] == "rewrite"

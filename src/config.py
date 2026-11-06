@@ -2,12 +2,13 @@
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 import yaml
 from pydantic import BaseModel, Field
 
 
-def load_env_file(env_path: Optional[Path] = None):
+def load_env_file(env_path: Path | None = None):
     """Load variables from .env file into os.environ if not already set."""
     candidates = [
         env_path,
@@ -65,7 +66,7 @@ class ExtractionSettings(BaseModel):
 
 class RetrievalSettings(BaseModel):
     top_k_candidates: int = 15
-    bm25_weights: Dict[str, float] = Field(
+    bm25_weights: dict[str, float] = Field(
         default_factory=lambda: {
             "title": 2.0,
             "core_problem": 2.5,
@@ -79,7 +80,7 @@ class RetrievalSettings(BaseModel):
 
 
 class TaxonomySettings(BaseModel):
-    categories: List[str] = Field(
+    categories: list[str] = Field(
         default_factory=lambda: [
             "업무스킬",
             "서비스기획/AI",
@@ -114,12 +115,12 @@ class AppConfig(BaseModel):
             path_field.mkdir(parents=True, exist_ok=True)
 
 
-def load_config(config_file: Optional[str | Path] = None) -> AppConfig:
+def load_config(config_file: str | Path | None = None) -> AppConfig:
     """Load configuration from YAML file and environment variables."""
     cfg_path = Path(config_file) if config_file else Path("config.yaml")
-    data: Dict[str, Any] = {}
+    data: dict[str, Any] = {}
     if cfg_path.exists():
-        with open(cfg_path, "r", encoding="utf-8") as f:
+        with open(cfg_path, encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
 
     # Override with env vars if present
@@ -127,6 +128,18 @@ def load_config(config_file: Optional[str | Path] = None) -> AppConfig:
         if "paths" not in data:
             data["paths"] = {}
         data["paths"]["db_path"] = os.environ["CATALOG_DB_PATH"]
+
+    env_provider = os.getenv("DEFAULT_LLM_PROVIDER") or os.getenv("LLM_PROVIDER")
+    if env_provider:
+        if "extraction" not in data:
+            data["extraction"] = {}
+        data["extraction"]["default_provider"] = env_provider.lower()
+
+    env_model = os.getenv("EXTRACTION_MODEL") or os.getenv("DEFAULT_MODEL")
+    if env_model:
+        if "extraction" not in data:
+            data["extraction"] = {}
+        data["extraction"]["default_model"] = env_model
 
     config = AppConfig(**data)
     return config

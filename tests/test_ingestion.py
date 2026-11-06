@@ -1,12 +1,11 @@
 """Tests for Ingestion Scanner and Multimodal PDF Processor (Milestone 2)."""
 
 from pathlib import Path
-import pytest
-from PIL import Image, ImageDraw
 
+from PIL import Image, ImageDraw
 from pypdf import PdfWriter
+
 from src.config import AppConfig, ImageFilterSettings, PathSettings
-from src.ingestion.pdf_processor import PDFProcessor
 from src.ingestion.scanner import IngestionScanner
 from src.ingestion.text_normalizer import clean_boilerplate, extract_author_and_date
 from src.models import ArticleStatus

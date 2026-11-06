@@ -1,10 +1,10 @@
 """Tests for SynthesisPlanner and ArticleSynthesizer (Milestone 4)."""
 
 from pathlib import Path
+
 import pytest
 
 from src.config import AppConfig, PathSettings
-from src.extraction.llm_client import LLMClient
 from src.models import (
     ArticleArchetype,
     ArticleMetadata,
@@ -19,7 +19,7 @@ from src.synthesis.synthesizer import ArticleSynthesizer
 
 
 @pytest.fixture
-def synthesizer_env(tmp_path: Path):
+def synthesizer_env(tmp_path: Path, mock_llm_client):
     db_path = tmp_path / "index" / "catalog.db"
     processed_dir = tmp_path / "processed"
     outputs_dir = tmp_path / "outputs"
@@ -49,7 +49,7 @@ def synthesizer_env(tmp_path: Path):
     # Seed 3 text
     repo.save_processed_text("8204", "# 연말 프로모션 D-90 역산 기획\n\n체크리스트 표와 단계별 튜토리얼...")
 
-    llm = LLMClient()
+    llm = mock_llm_client
     planner = SynthesisPlanner(llm_client=llm)
     synthesizer = ArticleSynthesizer(
         config=config,
@@ -60,8 +60,8 @@ def synthesizer_env(tmp_path: Path):
     return repo, synthesizer, config
 
 
-def test_blueprint_planner():
-    llm = LLMClient()
+def test_blueprint_planner(mock_llm_client):
+    llm = mock_llm_client
     planner = SynthesisPlanner(llm_client=llm)
 
     seeds = [

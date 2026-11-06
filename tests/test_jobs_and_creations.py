@@ -1,9 +1,10 @@
 """Tests for Milestone 6: Job logging (pipeline_jobs) and My Creation DB (drafts_and_creations)."""
 
-import json
 from pathlib import Path
+
 import pytest
 
+from src.extraction.batch_extractor import BatchMetadataExtractor
 from src.models import (
     ArticleArchetype,
     ArticleMetadata,
@@ -14,7 +15,6 @@ from src.models import (
 )
 from src.storage.db import init_db
 from src.storage.repository import StorageRepository
-from src.extraction.batch_extractor import BatchMetadataExtractor
 from src.synthesis.synthesizer import ArticleSynthesizer
 
 
@@ -133,7 +133,7 @@ def test_drafts_and_creations_workflow(repo: StorageRepository):
     assert len(repo.get_finalized_creations_for_learning(min_count=1)) == 0
 
 
-def test_batch_extractor_job_tracking(repo: StorageRepository):
+def test_batch_extractor_job_tracking(repo: StorageRepository, mock_llm_client):
     """Verify that BatchMetadataExtractor creates and updates pipeline_jobs during execution."""
     # Seed 2 articles
     article1 = ArticleRecord(
@@ -161,7 +161,7 @@ def test_batch_extractor_job_tracking(repo: StorageRepository):
     repo.save_processed_text("job_test_1", "# 1\n이것은 첫번째 테스트 내용입니다.")
     repo.save_processed_text("job_test_2", "# 2\n이것은 두번째 테스트 내용입니다.")
 
-    extractor = BatchMetadataExtractor(repo=repo)
+    extractor = BatchMetadataExtractor(repo=repo, llm_client=mock_llm_client)
     job_id = "job_batch_extract_run"
     extracted = extractor.run_sync(doc_ids=["job_test_1", "job_test_2"], job_id=job_id)
 
@@ -174,7 +174,7 @@ def test_batch_extractor_job_tracking(repo: StorageRepository):
     assert job["failed_items"] == 0
 
 
-def test_synthesizer_job_and_creation_recording(repo: StorageRepository):
+def test_synthesizer_job_and_creation_recording(repo: StorageRepository, mock_llm_client):
     """Verify that synthesizer creates drafts_and_creations record and logs pipeline job."""
     # Seed an article for distillation
     article = ArticleRecord(
@@ -217,7 +217,7 @@ def test_synthesizer_job_and_creation_recording(repo: StorageRepository):
         )
     ]
 
-    synthesizer = ArticleSynthesizer(repo=repo)
+    synthesizer = ArticleSynthesizer(repo=repo, llm_client=mock_llm_client)
     out_file, content, blueprint, sheets = synthesizer.synthesize_sync(
         topic="비개발자의 자동화 도입",
         direction="실무 신뢰 장치 중심",

@@ -1,10 +1,10 @@
 """Repository for articles, metadata, and asset storage operations."""
 
 import json
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
 import sqlite3
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
 from src.models import (
     ArticleMetadata,
@@ -13,13 +13,13 @@ from src.models import (
     VisualAssetItem,
     VisualAssetManifest,
 )
-from src.storage.db import get_connection, get_db, init_db
+from src.storage.db import get_db, init_db
 
 
 class StorageRepository:
     """Manages SQLite database records and filesystem assets."""
 
-    def __init__(self, db_path: Union[str, Path], processed_dir: Optional[Union[str, Path]] = None):
+    def __init__(self, db_path: str | Path, processed_dir: str | Path | None = None):
         self.db_path = Path(db_path)
         self.processed_dir = Path(processed_dir) if processed_dir else self.db_path.parent.parent / "processed"
         self.texts_dir = self.processed_dir / "texts"
@@ -86,7 +86,7 @@ class StorageRepository:
         with get_db(self.db_path) as conn:
             conn.execute(sql, params)
 
-    def get_article(self, doc_id: str) -> Optional[ArticleRecord]:
+    def get_article(self, doc_id: str) -> ArticleRecord | None:
         """Fetch article by doc_id."""
         with get_db(self.db_path) as conn:
             cursor = conn.execute("SELECT * FROM articles WHERE doc_id = ?", (doc_id,))
@@ -95,7 +95,7 @@ class StorageRepository:
                 return None
             return self._row_to_article(row)
 
-    def get_article_by_hash(self, content_hash: str) -> Optional[ArticleRecord]:
+    def get_article_by_hash(self, content_hash: str) -> ArticleRecord | None:
         """Fetch article by content hash."""
         with get_db(self.db_path) as conn:
             cursor = conn.execute("SELECT * FROM articles WHERE content_hash = ?", (content_hash,))
@@ -104,7 +104,7 @@ class StorageRepository:
                 return None
             return self._row_to_article(row)
 
-    def get_article_by_title(self, title: str) -> Optional[ArticleRecord]:
+    def get_article_by_title(self, title: str) -> ArticleRecord | None:
         """Fetch article by exact title."""
         if not title:
             return None
@@ -117,12 +117,12 @@ class StorageRepository:
 
     def list_articles(
         self,
-        status: Optional[Union[str, ArticleStatus]] = None,
-        limit: Optional[int] = None,
-    ) -> List[ArticleRecord]:
+        status: str | ArticleStatus | None = None,
+        limit: int | None = None,
+    ) -> list[ArticleRecord]:
         """List articles, optionally filtered by status and limited."""
         query = "SELECT * FROM articles"
-        params: List[Any] = []
+        params: list[Any] = []
         if status:
             val = status.value if isinstance(status, ArticleStatus) else status
             query += " WHERE status = ?"
@@ -138,7 +138,7 @@ class StorageRepository:
 
     def update_article_status(self, doc_id: str, status: ArticleStatus, error_msg: str = "") -> None:
         """Update processing status of an article."""
-        indexed_at = datetime.now(timezone.utc).isoformat() if status == ArticleStatus.INDEXED else None
+        indexed_at = datetime.now(UTC).isoformat() if status == ArticleStatus.INDEXED else None
         sql = """
         UPDATE articles
         SET status = ?, error_msg = ?, indexed_at = COALESCE(?, indexed_at)
@@ -220,7 +220,7 @@ class StorageRepository:
     # -------------------------------------------------------------
     # 3. Visual Assets (article_assets table & manifest.json)
     # -------------------------------------------------------------
-    def save_visual_assets(self, doc_id: str, assets: List[VisualAssetItem]) -> Path:
+    def save_visual_assets(self, doc_id: str, assets: list[VisualAssetItem]) -> Path:
         """Save visual assets to article_assets table and manifest.json."""
         doc_asset_dir = self.assets_dir / doc_id
         doc_asset_dir.mkdir(parents=True, exist_ok=True)
@@ -243,7 +243,7 @@ class StorageRepository:
 
         return manifest_path
 
-    def get_visual_assets(self, doc_id: str) -> List[VisualAssetItem]:
+    def get_visual_assets(self, doc_id: str) -> list[VisualAssetItem]:
         """Fetch visual assets for doc_id."""
         with get_db(self.db_path) as conn:
             cursor = conn.execute(
@@ -269,7 +269,7 @@ class StorageRepository:
         self,
         doc_id: str,
         metadata: ArticleMetadata,
-        title: Optional[str] = None,
+        title: str | None = None,
         asset_captions: str = "",
     ) -> Path:
         """
@@ -362,7 +362,7 @@ class StorageRepository:
             )
 
             # Mark indexed
-            now_iso = datetime.now(timezone.utc).isoformat()
+            now_iso = datetime.now(UTC).isoformat()
             conn.execute(
                 "UPDATE articles SET status = 'INDEXED', indexed_at = ? WHERE doc_id = ?",
                 (now_iso, doc_id),
@@ -370,7 +370,7 @@ class StorageRepository:
 
         return json_path
 
-    def get_article_metadata(self, doc_id: str) -> Optional[ArticleMetadata]:
+    def get_article_metadata(self, doc_id: str) -> ArticleMetadata | None:
         """Retrieve ArticleMetadata from SQLite or JSON file fallback."""
         with get_db(self.db_path) as conn:
             cursor = conn.execute("SELECT * FROM article_metadata WHERE doc_id = ?", (doc_id,))
@@ -401,7 +401,7 @@ class StorageRepository:
     # -------------------------------------------------------------
     def create_job(self, job_id: str, job_type: str, total_items: int = 0) -> str:
         """Create a new pipeline job record in RUNNING status."""
-        now_iso = datetime.now(timezone.utc).isoformat()
+        now_iso = datetime.now(UTC).isoformat()
         with get_db(self.db_path) as conn:
             conn.execute(
                 """
@@ -424,15 +424,16 @@ class StorageRepository:
         job_id: str,
         processed_delta: int = 0,
         failed_delta: int = 0,
-        current_doc_id: Optional[str] = None,
-        log_summary: Optional[str] = None,
-        status: Optional[str] = None,
+        total_items: int | None = None,
+        current_doc_id: str | None = None,
+        log_summary: str | None = None,
+        status: str | None = None,
     ) -> None:
         """Increment progress and update status of a pipeline job."""
-        now_iso = datetime.now(timezone.utc).isoformat()
+        now_iso = datetime.now(UTC).isoformat()
         with get_db(self.db_path) as conn:
             cursor = conn.execute(
-                "SELECT processed_items, failed_items, log_summary FROM pipeline_jobs WHERE job_id = ?",
+                "SELECT processed_items, failed_items, total_items, log_summary FROM pipeline_jobs WHERE job_id = ?",
                 (job_id,),
             )
             row = cursor.fetchone()
@@ -441,12 +442,14 @@ class StorageRepository:
 
             new_processed = row["processed_items"] + processed_delta
             new_failed = row["failed_items"] + failed_delta
+            new_total = total_items if total_items is not None else row["total_items"]
             new_summary = log_summary if log_summary is not None else row["log_summary"]
 
             sql = """
             UPDATE pipeline_jobs
             SET processed_items = ?,
                 failed_items = ?,
+                total_items = ?,
                 current_doc_id = COALESCE(?, current_doc_id),
                 log_summary = ?,
                 status = COALESCE(?, status),
@@ -455,17 +458,17 @@ class StorageRepository:
             """
             conn.execute(
                 sql,
-                (new_processed, new_failed, current_doc_id, new_summary, status, now_iso, job_id),
+                (new_processed, new_failed, new_total, current_doc_id, new_summary, status, now_iso, job_id),
             )
 
     def complete_job(
         self,
         job_id: str,
         status: str = "COMPLETED",
-        log_summary: Optional[str] = None,
+        log_summary: str | None = None,
     ) -> None:
         """Mark a job as COMPLETED or FAILED."""
-        now_iso = datetime.now(timezone.utc).isoformat()
+        now_iso = datetime.now(UTC).isoformat()
         with get_db(self.db_path) as conn:
             conn.execute(
                 """
@@ -479,14 +482,14 @@ class StorageRepository:
                 (status, now_iso, now_iso, log_summary, job_id),
             )
 
-    def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
+    def get_job(self, job_id: str) -> dict[str, Any] | None:
         """Fetch job record by job_id as a dictionary."""
         with get_db(self.db_path) as conn:
             cursor = conn.execute("SELECT * FROM pipeline_jobs WHERE job_id = ?", (job_id,))
             row = cursor.fetchone()
             return dict(row) if row else None
 
-    def list_jobs(self, limit: int = 20) -> List[Dict[str, Any]]:
+    def list_jobs(self, limit: int = 20) -> list[dict[str, Any]]:
         """List recent pipeline jobs."""
         with get_db(self.db_path) as conn:
             cursor = conn.execute(
@@ -522,14 +525,14 @@ class StorageRepository:
         topic: str,
         direction: str,
         target_archetype: str,
-        seed_doc_ids: List[str],
+        seed_doc_ids: list[str],
         blueprint_json: str,
         distilled_sheets_json: str,
         ai_draft_text: str,
         status: str = "DRAFT",
     ) -> str:
         """Save a generated draft into drafts_and_creations table."""
-        now_iso = datetime.now(timezone.utc).isoformat()
+        now_iso = datetime.now(UTC).isoformat()
         with get_db(self.db_path) as conn:
             conn.execute(
                 """
@@ -572,7 +575,7 @@ class StorageRepository:
         status: str = "FINALIZED",
     ) -> None:
         """Update draft to FINALIZED with user modifications."""
-        now_iso = datetime.now(timezone.utc).isoformat()
+        now_iso = datetime.now(UTC).isoformat()
         with get_db(self.db_path) as conn:
             conn.execute(
                 """
@@ -586,7 +589,7 @@ class StorageRepository:
                 (user_final_text, custom_notes, status, now_iso, creation_id),
             )
 
-    def get_creation(self, creation_id: str) -> Optional[Dict[str, Any]]:
+    def get_creation(self, creation_id: str) -> dict[str, Any] | None:
         """Fetch a single creation record by creation_id."""
         with get_db(self.db_path) as conn:
             cursor = conn.execute(
@@ -602,12 +605,12 @@ class StorageRepository:
 
     def list_creations(
         self,
-        status: Optional[str] = None,
+        status: str | None = None,
         limit: int = 50,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List creations, optionally filtered by status."""
         query = "SELECT * FROM drafts_and_creations"
-        params: List[Any] = []
+        params: list[Any] = []
         if status:
             query += " WHERE status = ?"
             params.append(status)
@@ -623,15 +626,43 @@ class StorageRepository:
                 results.append(item)
             return results
 
+    def get_recently_used_seed_ids(self, days: int = 7) -> set[str]:
+        """
+        Fetch distinct seed doc_ids adopted in creations generated within the last N days.
+        Used to apply cooldown penalty to prevent seed fatigue and monotonous recommendations.
+        """
+        from datetime import timedelta
+        cutoff_iso = (datetime.now(UTC) - timedelta(days=days)).isoformat()
+        recent_ids: set[str] = set()
+
+        with get_db(self.db_path) as conn:
+            cursor = conn.execute(
+                """
+                SELECT seed_doc_ids_json FROM drafts_and_creations
+                WHERE created_at >= ? AND seed_doc_ids_json IS NOT NULL
+                """,
+                (cutoff_iso,),
+            )
+            for row in cursor.fetchall():
+                raw = row["seed_doc_ids_json"]
+                if raw:
+                    try:
+                        ids = json.loads(raw)
+                        if isinstance(ids, list):
+                            recent_ids.update(str(i) for i in ids if i)
+                    except Exception:
+                        pass
+        return recent_ids
+
     def get_finalized_creations_for_learning(
         self,
-        min_count: int = 3,
-        include_already_used: bool = True,
-    ) -> List[Dict[str, Any]]:
+        min_count: int = 1,
+        include_already_used: bool = False,
+        window_size: int = 10,
+    ) -> list[dict[str, Any]]:
         """
-        Fetch finalized creations with user_final_text for style learning.
-        If unlearned creations are fewer than min_count, also includes previously learned
-        finalized creations so the user can always train/refresh their persona when they have enough finalized articles.
+        Fetch finalized creations with user_final_text for persona style learning.
+        Supports sliding window (up to window_size most recent creations) and force learning (min_count >= 1).
         """
         with get_db(self.db_path) as conn:
             # 1. First, check strictly unlearned items
@@ -652,9 +683,10 @@ class StorageRepository:
                 items.append(d)
 
             if len(items) >= min_count:
-                return items
+                return items[:window_size]
 
-            # 2. If unlearned items are below min_count, gather ALL finalized creations with final text
+            # 2. Sliding window fallback: If unlearned items are below min_count and include_already_used is True,
+            # gather the most recent finalized creations so style evolves dynamically.
             if include_already_used:
                 cursor_all = conn.execute(
                     """
@@ -662,8 +694,10 @@ class StorageRepository:
                     WHERE status = 'FINALIZED'
                       AND user_final_text IS NOT NULL
                       AND LENGTH(TRIM(user_final_text)) > 0
-                    ORDER BY finalized_at DESC
-                    """
+                    ORDER BY COALESCE(finalized_at, created_at) DESC
+                    LIMIT ?
+                    """,
+                    (window_size,),
                 )
                 all_items = []
                 for r in cursor_all.fetchall():
@@ -672,11 +706,11 @@ class StorageRepository:
                     all_items.append(d)
 
                 if len(all_items) >= min_count:
-                    return all_items[:10]
+                    return all_items
 
             return items if len(items) >= min_count else []
 
-    def mark_creations_used_for_style(self, creation_ids: List[str]) -> None:
+    def mark_creations_used_for_style(self, creation_ids: list[str]) -> None:
         """Mark creation records as used_for_style_learning = 1."""
         if not creation_ids:
             return
@@ -690,9 +724,9 @@ class StorageRepository:
     # -------------------------------------------------------------
     # 7. Dense Vector Embeddings (article_embeddings table)
     # -------------------------------------------------------------
-    def upsert_article_embedding(self, doc_id: str, embedding: List[float], model: str = "text-embedding-004") -> None:
+    def upsert_article_embedding(self, doc_id: str, embedding: list[float], model: str = "text-embedding-004") -> None:
         """Store or update dense vector embedding for an article."""
-        now_iso = datetime.now(timezone.utc).isoformat()
+        now_iso = datetime.now(UTC).isoformat()
         with get_db(self.db_path) as conn:
             conn.execute(
                 """
@@ -706,7 +740,7 @@ class StorageRepository:
                 (doc_id, json.dumps(embedding), model, now_iso),
             )
 
-    def get_article_embedding(self, doc_id: str) -> Optional[List[float]]:
+    def get_article_embedding(self, doc_id: str) -> list[float] | None:
         """Retrieve embedding vector for a single article."""
         with get_db(self.db_path) as conn:
             cursor = conn.execute("SELECT embedding_json FROM article_embeddings WHERE doc_id = ?", (doc_id,))
@@ -715,9 +749,9 @@ class StorageRepository:
                 return json.loads(row["embedding_json"])
         return None
 
-    def get_all_embeddings(self) -> Dict[str, List[float]]:
+    def get_all_embeddings(self) -> dict[str, list[float]]:
         """Retrieve all stored embedding vectors as a map of doc_id -> vector."""
-        res: Dict[str, List[float]] = {}
+        res: dict[str, list[float]] = {}
         with get_db(self.db_path) as conn:
             cursor = conn.execute("SELECT doc_id, embedding_json FROM article_embeddings")
             for row in cursor.fetchall():
@@ -741,7 +775,7 @@ class StorageRepository:
         estimated_cost_usd: float = 0.0,
     ) -> None:
         """Log token count, latency, and cost for an LLM invocation."""
-        now_iso = datetime.now(timezone.utc).isoformat()
+        now_iso = datetime.now(UTC).isoformat()
         total_tokens = prompt_tokens + completion_tokens
         with get_db(self.db_path) as conn:
             conn.execute(
@@ -755,7 +789,7 @@ class StorageRepository:
                 (task_type, provider, model, prompt_tokens, completion_tokens, total_tokens, latency_ms, estimated_cost_usd, now_iso),
             )
 
-    def get_observability_stats(self) -> Dict[str, Any]:
+    def get_observability_stats(self) -> dict[str, Any]:
         """Aggregate total tokens, invocations, average latency, and estimated cost."""
         with get_db(self.db_path) as conn:
             cursor = conn.execute(

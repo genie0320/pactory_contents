@@ -6,7 +6,8 @@ Clean, production-grade implementation with zero hardcoded mock texts.
 """
 
 import re
-from typing import Any, Dict, Optional
+from typing import Any
+
 from src.config import AppConfig, load_config
 from src.exceptions import LLMServiceError
 from src.extraction.llm_client import LLMClient
@@ -19,7 +20,7 @@ from src.extraction.prompts import (
 class ArticleProofreader:
     """Evaluates drafts and provides editorial critique and platform-tailored rewrites via LLM."""
 
-    def __init__(self, config: Optional[AppConfig] = None, llm_client: Optional[LLMClient] = None):
+    def __init__(self, config: AppConfig | None = None, llm_client: LLMClient | None = None):
         self.config = config or load_config()
         self.llm_client = llm_client or LLMClient()
 
@@ -48,7 +49,7 @@ class ArticleProofreader:
         custom_instruction: str = "",
         critique_feedback: str = "",
         metadata_context: str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Asynchronous review and polish call via LLM."""
         if not self.llm_client.api_key:
             raise LLMServiceError("LLM API key is required for editorial proofreading and rewriting.")
@@ -87,7 +88,7 @@ class ArticleProofreader:
         custom_instruction: str = "",
         critique_feedback: str = "",
         metadata_context: str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Synchronous review and polish call via LLM."""
         if not self.llm_client.api_key:
             raise LLMServiceError("LLM API key is required for editorial proofreading and rewriting.")
@@ -120,7 +121,7 @@ class ArticleProofreader:
 
     def _parse_llm_response(
         self, raw_response: str, platform: str, mode: str, original_content: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Parse LLM output into structured review payload."""
         if mode == "report":
             return {

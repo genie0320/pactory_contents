@@ -3,9 +3,8 @@
 import hashlib
 import re
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 from src.config import AppConfig, load_config
 from src.ingestion.pdf_processor import PDFProcessor
@@ -17,7 +16,7 @@ from src.storage.repository import StorageRepository
 class IngestionScanner:
     """Scans inbox folder, checks SHA-256 hash, and routes files to processed and archive."""
 
-    def __init__(self, config: Optional[AppConfig] = None, repo: Optional[StorageRepository] = None):
+    def __init__(self, config: AppConfig | None = None, repo: StorageRepository | None = None):
         self.config = config or load_config()
         self.config.ensure_directories()
         self.repo = repo or StorageRepository(
@@ -25,8 +24,8 @@ class IngestionScanner:
             processed_dir=self.config.paths.processed_dir,
         )
         self.pdf_processor = PDFProcessor(image_filter=self.config.image_filter)
-        self.last_skipped_duplicates: List[dict] = []
-        self.last_newly_processed: List[ArticleRecord] = []
+        self.last_skipped_duplicates: list[dict] = []
+        self.last_newly_processed: list[ArticleRecord] = []
 
     @staticmethod
     def compute_sha256(file_path: Path) -> str:
@@ -38,7 +37,7 @@ class IngestionScanner:
         return hasher.hexdigest()
 
     @staticmethod
-    def parse_filename(filename: str) -> Tuple[Optional[str], str]:
+    def parse_filename(filename: str) -> tuple[str | None, str]:
         """
         Extract doc_id and initial title from filename.
         Example: '8219_그때 그거 어디서 정했죠.pdf' -> ('8219', '그때 그거 어디서 정했죠')
@@ -55,11 +54,11 @@ class IngestionScanner:
 
     def scan_inbox(
         self,
-        inbox_dir: Optional[Path] = None,
+        inbox_dir: Path | None = None,
         force: bool = False,
-        move_archive: bool = False,
-        job_id: Optional[str] = None,
-    ) -> List[ArticleRecord]:
+        move_archive: bool = True,
+        job_id: str | None = None,
+    ) -> list[ArticleRecord]:
         """
         Scan inbox directory for .pdf, .md, and .txt files.
         Processes each file, writes clean texts and assets, and updates DB.
@@ -71,7 +70,7 @@ class IngestionScanner:
         self.last_skipped_duplicates = []
         self.last_newly_processed = []
 
-        processed_records: List[ArticleRecord] = []
+        processed_records: list[ArticleRecord] = []
         supported_extensions = {".pdf", ".md", ".txt"}
         candidate_files = [p for p in target_dir.iterdir() if p.is_file() and p.suffix.lower() in supported_extensions]
 
@@ -79,7 +78,7 @@ class IngestionScanner:
             return []
 
         if not job_id:
-            job_id = f"ingest_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+            job_id = f"ingest_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
             self.repo.create_job(job_id=job_id, job_type="INGESTION", total_items=len(candidate_files))
 
         for file_path in candidate_files:
@@ -118,8 +117,8 @@ class IngestionScanner:
         self,
         file_path: Path,
         force: bool = False,
-        move_archive: bool = False,
-    ) -> Optional[ArticleRecord]:
+        move_archive: bool = True,
+    ) -> ArticleRecord | None:
         """Process a single file through the ingestion pipeline."""
         content_hash = self.compute_sha256(file_path)
         filename = file_path.name
@@ -182,7 +181,7 @@ class IngestionScanner:
         ext = file_path.suffix.lower().lstrip(".")
         author = ""
         published_date = ""
-        visual_assets: List[VisualAssetItem] = []
+        visual_assets: list[VisualAssetItem] = []
         cleaned_text = ""
 
         # Assets destination directory
@@ -209,6 +208,8 @@ class IngestionScanner:
         # Route original file to archive
         archive_dest = self.config.paths.archive_dir / f"{doc_id}_{filename}"
         if move_archive:
+            if archive_dest.exists() and archive_dest.resolve() != file_path.resolve():
+                archive_dest.unlink()
             shutil.move(str(file_path), str(archive_dest))
             stored_orig_path = str(archive_dest)
         else:

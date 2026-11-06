@@ -1,7 +1,6 @@
 """Blueprint planner: generates SynthesisBlueprint from selected Seed metadata."""
 
 import json
-from typing import List, Optional
 
 from src.extraction.llm_client import LLMClient
 from src.extraction.prompts import (
@@ -18,15 +17,15 @@ from src.models import (
 class SynthesisPlanner:
     """Creates a unified SynthesisBlueprint from complementary seed metadata."""
 
-    def __init__(self, llm_client: Optional[LLMClient] = None):
+    def __init__(self, llm_client: LLMClient | None = None):
         self.llm_client = llm_client or LLMClient()
 
     async def plan_blueprint(
         self,
         topic: str,
         direction: str,
-        seeds: List[SeedRoleAssignment],
-        archetype: Optional[ArticleArchetype] = None,
+        seeds: list[SeedRoleAssignment],
+        archetype: ArticleArchetype | None = None,
     ) -> SynthesisBlueprint:
         """Generate SynthesisBlueprint structured output."""
         seeds_summary_blocks = []
@@ -64,8 +63,8 @@ class SynthesisPlanner:
         self,
         topic: str,
         direction: str,
-        seeds: List[SeedRoleAssignment],
-        archetype: Optional[ArticleArchetype] = None,
+        seeds: list[SeedRoleAssignment],
+        archetype: ArticleArchetype | None = None,
     ) -> SynthesisBlueprint:
         """Synchronous version for offline/sandbox mode."""
         seeds_summary_blocks = []

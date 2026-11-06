@@ -2,9 +2,7 @@
 
 from io import BytesIO
 from pathlib import Path
-from typing import List, Optional, Tuple
-import io
-import re
+
 from PIL import Image
 from pypdf import PdfReader
 
@@ -16,7 +14,7 @@ from src.models import VisualAssetItem
 class PDFProcessor:
     """Extracts cleaned text and visual assets (images/charts) with captions from PDF articles."""
 
-    def __init__(self, image_filter: Optional[ImageFilterSettings] = None):
+    def __init__(self, image_filter: ImageFilterSettings | None = None):
         self.filter = image_filter or ImageFilterSettings()
 
     def process_pdf(
@@ -24,7 +22,7 @@ class PDFProcessor:
         pdf_path: Path,
         doc_id: str,
         assets_output_dir: Path,
-    ) -> Tuple[str, str, str, str, List[VisualAssetItem]]:
+    ) -> tuple[str, str, str, str, list[VisualAssetItem]]:
         """
         Process a PDF article.
         Returns:
@@ -33,8 +31,8 @@ class PDFProcessor:
         reader = PdfReader(str(pdf_path))
         num_pages = len(reader.pages)
 
-        page_texts: List[str] = []
-        visual_assets: List[VisualAssetItem] = []
+        page_texts: list[str] = []
+        visual_assets: list[VisualAssetItem] = []
         assets_output_dir.mkdir(parents=True, exist_ok=True)
         for old_png in assets_output_dir.glob("*.png"):
             try:
@@ -65,7 +63,7 @@ class PDFProcessor:
                     break
 
         # Second pass: process each page for images and captions
-        final_pages_md: List[str] = []
+        final_pages_md: list[str] = []
         seen_image_hashes: set[str] = set()
 
         for page_idx, page in enumerate(reader.pages):
@@ -74,7 +72,7 @@ class PDFProcessor:
             cleaned_page_text = clean_boilerplate(page_raw)
 
             # Find potential captions on this page: lines with '║' or '©'
-            candidate_captions: List[str] = []
+            candidate_captions: list[str] = []
             for line in cleaned_page_text.split("\n"):
                 stripped = line.strip()
                 if "║" in stripped or ("©" in stripped and len(stripped) < 80):
@@ -118,13 +116,13 @@ class PDFProcessor:
         page_no: int,
         doc_id: str,
         assets_dir: Path,
-        candidate_captions: List[str],
-        seen_image_hashes: Optional[set] = None,
-    ) -> List[VisualAssetItem]:
+        candidate_captions: list[str],
+        seen_image_hashes: set | None = None,
+    ) -> list[VisualAssetItem]:
         """Extract valid embedded images matching size and aspect ratio thresholds, deduplicating identical images."""
         import hashlib
 
-        extracted: List[VisualAssetItem] = []
+        extracted: list[VisualAssetItem] = []
         img_idx = 1
         caption_idx = 0
 

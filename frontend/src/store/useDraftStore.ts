@@ -18,6 +18,11 @@ interface DraftState {
   isGeneratingBlueprint: boolean;
   isSynthesizing: boolean;
 
+  // Granular Model Selections per step
+  inspirationModel: string;
+  step2Model: string;
+  step3Model: string;
+
   // Actions
   setStep: (step: 1 | 2 | 3) => void;
   setTopic: (topic: string) => void;
@@ -30,6 +35,9 @@ interface DraftState {
   setDraftContent: (content: string) => void;
   setCreationId: (id: string | null) => void;
   setLoading: (key: 'isSearchingSeeds' | 'isGeneratingBlueprint' | 'isSynthesizing', value: boolean) => void;
+  setInspirationModel: (m: string) => void;
+  setStep2Model: (m: string) => void;
+  setStep3Model: (m: string) => void;
 
   // Clean reset
   resetDraft: () => void;
@@ -48,6 +56,9 @@ const initialState = {
   isSearchingSeeds: false,
   isGeneratingBlueprint: false,
   isSynthesizing: false,
+  inspirationModel: 'gemini-3.5-flash-lite',
+  step2Model: 'gemini-3.5-flash-lite',
+  step3Model: 'gemini-3.5-flash-lite',
 };
 
 export const useDraftStore = create<DraftState>((set) => ({
@@ -73,6 +84,9 @@ export const useDraftStore = create<DraftState>((set) => ({
   setDraftContent: (draftContent) => set({ draftContent }),
   setCreationId: (creationId) => set({ creationId }),
   setLoading: (key, value) => set({ [key]: value }),
+  setInspirationModel: (inspirationModel) => set({ inspirationModel }),
+  setStep2Model: (step2Model) => set({ step2Model }),
+  setStep3Model: (step3Model) => set({ step3Model }),
 
   resetDraft: () => {
     set({ ...initialState });

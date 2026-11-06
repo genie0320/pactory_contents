@@ -1,9 +1,7 @@
 """Asynchronous fault-tolerant batch metadata extractor with checkpointing."""
 
 import asyncio
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import List, Optional
+from datetime import UTC, datetime
 
 from src.config import AppConfig, load_config
 from src.extraction.llm_client import LLMClient
@@ -20,10 +18,10 @@ class BatchMetadataExtractor:
 
     def __init__(
         self,
-        config: Optional[AppConfig] = None,
-        repo: Optional[StorageRepository] = None,
-        llm_client: Optional[LLMClient] = None,
-        concurrency: Optional[int] = None,
+        config: AppConfig | None = None,
+        repo: StorageRepository | None = None,
+        llm_client: LLMClient | None = None,
+        concurrency: int | None = None,
     ):
         self.config = config or load_config()
         self.repo = repo or StorageRepository(
@@ -31,7 +29,7 @@ class BatchMetadataExtractor:
             processed_dir=self.config.paths.processed_dir,
         )
         self.concurrency = concurrency or self.config.extraction.concurrency
-        self._semaphore: Optional[asyncio.Semaphore] = None
+        self._semaphore: asyncio.Semaphore | None = None
         self.llm_client = llm_client or LLMClient(
             provider=self.config.extraction.default_provider,
             model=self.config.extraction.default_model,
@@ -44,7 +42,7 @@ class BatchMetadataExtractor:
             self._semaphore = asyncio.Semaphore(self.concurrency)
         return self._semaphore
 
-    def get_pending_articles(self) -> List[ArticleRecord]:
+    def get_pending_articles(self) -> list[ArticleRecord]:
         """
         Checkpoint lookup:
         Fetch only articles that are not yet INDEXED (i.e. status INGESTED or FAILED).
@@ -58,8 +56,8 @@ class BatchMetadataExtractor:
     async def process_article(
         self,
         article: ArticleRecord,
-        job_id: Optional[str] = None,
-    ) -> Optional[ArticleMetadata]:
+        job_id: str | None = None,
+    ) -> ArticleMetadata | None:
         """Process a single article with semaphore concurrency limit and immediate commit."""
         async with self.semaphore:
             doc_id = article.doc_id
@@ -117,8 +115,8 @@ class BatchMetadataExtractor:
     def process_article_sync(
         self,
         article: ArticleRecord,
-        job_id: Optional[str] = None,
-    ) -> Optional[ArticleMetadata]:
+        job_id: str | None = None,
+    ) -> ArticleMetadata | None:
         """Synchronous single-article extraction."""
         doc_id = article.doc_id
         try:
@@ -168,10 +166,10 @@ class BatchMetadataExtractor:
 
     async def run(
         self,
-        doc_ids: Optional[List[str]] = None,
-        max_items: Optional[int] = None,
-        job_id: Optional[str] = None,
-    ) -> List[str]:
+        doc_ids: list[str] | None = None,
+        max_items: int | None = None,
+        job_id: str | None = None,
+    ) -> list[str]:
         """
         Run extraction for pending articles.
         Returns list of newly indexed doc_ids.
@@ -190,7 +188,7 @@ class BatchMetadataExtractor:
             return []
 
         if not job_id:
-            job_id = f"extract_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+            job_id = f"extract_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
         if not self.repo.get_job(job_id):
             self.repo.create_job(job_id=job_id, job_type="METADATA_EXTRACTION", total_items=len(pending))
 
@@ -213,10 +211,10 @@ class BatchMetadataExtractor:
 
     def run_sync(
         self,
-        doc_ids: Optional[List[str]] = None,
-        max_items: Optional[int] = None,
-        job_id: Optional[str] = None,
-    ) -> List[str]:
+        doc_ids: list[str] | None = None,
+        max_items: int | None = None,
+        job_id: str | None = None,
+    ) -> list[str]:
         """Synchronous run for pending articles with job tracking."""
         if doc_ids:
             pending = [self.repo.get_article(did) for did in doc_ids]
@@ -231,7 +229,7 @@ class BatchMetadataExtractor:
             return []
 
         if not job_id:
-            job_id = f"extract_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+            job_id = f"extract_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
         if not self.repo.get_job(job_id):
             self.repo.create_job(job_id=job_id, job_type="METADATA_EXTRACTION", total_items=len(pending))
 

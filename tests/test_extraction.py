@@ -1,24 +1,21 @@
 """Tests for Asynchronous Metadata Batch Extractor and Fault-Tolerant Checkpointing (Milestone 3)."""
 
 from pathlib import Path
+
 import pytest
 
 from src.config import AppConfig, ExtractionSettings, PathSettings
 from src.extraction.batch_extractor import BatchMetadataExtractor
-from src.extraction.llm_client import LLMClient
 from src.models import (
-    ArticleArchetype,
-    ArticleMetadata,
     ArticleRecord,
     ArticleStatus,
-    ReusableAssetType,
 )
 from src.storage.db import init_db
 from src.storage.repository import StorageRepository
 
 
 @pytest.fixture
-def extraction_env(tmp_path: Path):
+def extraction_env(tmp_path: Path, mock_llm_client):
     db_path = tmp_path / "index" / "catalog.db"
     processed_dir = tmp_path / "processed"
     init_db(db_path)
@@ -40,7 +37,7 @@ def extraction_env(tmp_path: Path):
     )
     config.ensure_directories()
     repo = StorageRepository(db_path=db_path, processed_dir=processed_dir)
-    llm_client = LLMClient()
+    llm_client = mock_llm_client
     extractor = BatchMetadataExtractor(
         config=config,
         repo=repo,

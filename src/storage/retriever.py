@@ -2,8 +2,7 @@
 
 import math
 import re
-from typing import Any, Dict, List, Optional, Set, Tuple
-import sqlite3
+from typing import Any
 
 from src.config import AppConfig, load_config
 from src.extraction.llm_client import LLMClient
@@ -17,9 +16,8 @@ from src.models import (
 from src.storage.db import get_connection
 from src.storage.repository import StorageRepository
 
-
 # Common Korean functional words and discourse markers to ignore in retrieval
-KOREAN_STOPWORDS: Set[str] = {
+KOREAN_STOPWORDS: set[str] = {
     "흔히", "통해", "과정", "있어야", "있으면", "하고", "만큼", "한다", "생각", "위해",
     "대한", "모든", "다른", "때문", "어떤", "이런", "저런", "그런", "매우", "가장",
     "더욱", "아주", "전혀", "단순", "것이", "경우", "관련", "대해", "이유", "방법",
@@ -31,19 +29,8 @@ KOREAN_STOPWORDS: Set[str] = {
     "아니다", "그냥", "단지", "약간", "조금", "항상", "자주", "가끔"
 }
 
-# Domain synonym expansion to bridge terminology discrepancies (e.g. 컨셉 vs 콘셉트)
-DOMAIN_SYNONYMS: Dict[str, List[str]] = {
-    "컨셉": ["컨셉", "콘셉트", "카피", "브랜딩", "브랜드", "기획", "아이디어"],
-    "콘셉트": ["콘셉트", "컨셉", "카피", "브랜딩", "브랜드", "기획"],
-    "카피": ["카피", "카피라이팅", "컨셉", "브랜딩", "슬로건"],
-    "브랜드": ["브랜드", "브랜딩", "리브랜딩", "팬덤", "부계정"],
-    "보고": ["보고", "보고서", "보고법", "기획서", "회사어", "두괄식"],
-    "보고서": ["보고서", "보고", "기획서", "자료조사"],
-    "미루기": ["미루기", "미루는", "의지박약", "완벽주의", "착수"],
-    "노션": ["노션", "업무관리", "생산성", "대시보드", "템플릿"],
-    "팀장": ["팀장", "리더십", "중간관리자", "위임"],
-    "템플릿": ["템플릿", "자동화", "반복업무", "효율"],
-}
+# Domain synonym expansion is deprecated in favor of Index-time LLM 10-Keyword Enrichment
+DOMAIN_SYNONYMS: dict[str, list[str]] = {}
 
 
 class SeedRetriever:
@@ -51,9 +38,9 @@ class SeedRetriever:
 
     def __init__(
         self,
-        config: Optional[AppConfig] = None,
-        repo: Optional[StorageRepository] = None,
-        llm_client: Optional[LLMClient] = None,
+        config: AppConfig | None = None,
+        repo: StorageRepository | None = None,
+        llm_client: LLMClient | None = None,
     ):
         self.config = config or load_config()
         self.repo = repo or StorageRepository(
@@ -64,7 +51,7 @@ class SeedRetriever:
         self.llm_client = llm_client or LLMClient(repo=self.repo)
 
     @staticmethod
-    def cosine_similarity(v1: List[float], v2: List[float]) -> float:
+    def cosine_similarity(v1: list[float], v2: list[float]) -> float:
         """Compute cosine similarity between two dense vectors."""
         if not v1 or not v2 or len(v1) != len(v2):
             return 0.0
@@ -76,13 +63,13 @@ class SeedRetriever:
         return dot / (norm1 * norm2)
 
     @staticmethod
-    def extract_keywords(text: str) -> List[str]:
+    def extract_keywords(text: str) -> list[str]:
         """Extract meaningful keywords stripping Korean particles, predicate endings, and punctuation."""
         cleaned = re.sub(r"[^\w\s가-힣a-zA-Z0-9]", " ", text)
         tokens = cleaned.split()
         particles = ("은", "는", "이", "가", "을", "를", "의", "에", "에서", "으로", "로", "와", "과", "하고", "도", "에게", "보다")
         endings = ("해요", "어요", "다고", "으면", "어서", "지만", "었다", "했다", "한다", "된다", "이다", "이며")
-        keywords: List[str] = []
+        keywords: list[str] = []
         for t in tokens:
             t_clean = t.strip()
             if len(t_clean) <= 1 or t_clean in KOREAN_STOPWORDS:
@@ -97,12 +84,10 @@ class SeedRetriever:
                     break
             if len(t_clean) >= 2 and t_clean not in KOREAN_STOPWORDS:
                 keywords.append(t_clean)
-                if t_clean in DOMAIN_SYNONYMS:
-                    keywords.extend(DOMAIN_SYNONYMS[t_clean])
         return list(dict.fromkeys(keywords))
 
     @staticmethod
-    def jaccard_similarity(tags1: List[str], tags2: List[str]) -> float:
+    def jaccard_similarity(tags1: list[str], tags2: list[str]) -> float:
         """Compute Jaccard similarity between two tag lists."""
         s1 = set(t.lower() for t in tags1)
         s2 = set(t.lower() for t in tags2)
@@ -118,7 +103,7 @@ class SeedRetriever:
         direction: str = "",
         top_k: int = 15,
         alpha: float = 0.5,
-    ) -> List[Tuple[ArticleRecord, ArticleMetadata, float]]:
+    ) -> list[tuple[ArticleRecord, ArticleMetadata, float]]:
         """
         Hybrid retrieval combining FTS5 BM25 (keyword matching) and Dense Vector Embedding (semantic similarity).
         Final score:
@@ -133,14 +118,14 @@ class SeedRetriever:
 
         fts_query = " OR ".join(f'"{kw}"' for kw in all_keywords if kw)
         conn = get_connection(self.db_path)
-        candidates: List[Tuple[ArticleRecord, ArticleMetadata, float]] = []
-        seen_doc_ids: Set[str] = set()
+        candidates: list[tuple[ArticleRecord, ArticleMetadata, float]] = []
+        seen_doc_ids: set[str] = set()
 
         try:
             cursor = conn.cursor()
             if fts_query:
                 sql = """
-                SELECT doc_id, bm25(metadata_fts, 2.0, 1.0, 1.5, 2.5, 3.0, 2.0, 2.0, 1.5, 2.5, 1.0) as rank
+                SELECT doc_id, bm25(metadata_fts, 3.0, 1.0, 1.0, 1.5, 2.0, 2.0, 1.5, 1.5, 4.0, 1.0) as rank
                 FROM metadata_fts
                 WHERE metadata_fts MATCH ?
                 ORDER BY rank
@@ -161,7 +146,7 @@ class SeedRetriever:
             if len(candidates) < top_k:
                 fallback_limit = top_k - len(candidates)
                 like_clauses = []
-                params: List[Any] = []
+                params: list[Any] = []
                 for kw in all_keywords[:3]:
                     like_clauses.append("(topic_tags_json LIKE ? OR primary_category LIKE ?)")
                     params.extend([f"%{kw}%", f"%{kw}%"])
@@ -204,6 +189,9 @@ class SeedRetriever:
         finally:
             conn.close()
 
+        # Cooldown check: penalize seeds used in creations within the last 7 days
+        recent_seed_ids = self.repo.get_recently_used_seed_ids(days=7)
+
         # Dense Vector Re-ranking & Hybrid Fusion
         try:
             query_text = f"{topic} {direction}".strip()
@@ -214,7 +202,7 @@ class SeedRetriever:
             for art, meta, raw_rank in candidates:
                 norm_bm25 = 1.0 / (1.0 + abs(raw_rank)) if raw_rank != 0.0 else 0.1
                 art_vec = stored_embeddings.get(art.doc_id)
-                if not art_vec:
+                if not art_vec or len(art_vec) != len(query_vec):
                     doc_repr = f"{art.title}. {meta.core_thesis}. {' '.join(meta.topic_tags)}"
                     art_vec = self.llm_client.get_embedding_sync(doc_repr)
                     self.repo.upsert_article_embedding(art.doc_id, art_vec)
@@ -223,20 +211,31 @@ class SeedRetriever:
                 sim = self.cosine_similarity(query_vec, art_vec)
                 norm_sim = max(0.0, sim)
                 final_score = (alpha * norm_bm25) + ((1.0 - alpha) * norm_sim)
+
+                # Policy 3: Apply 25% cooldown penalty to recently adopted seeds
+                if art.doc_id in recent_seed_ids:
+                    final_score *= 0.75
+
                 hybrid_candidates.append((art, meta, round(final_score, 4)))
 
             hybrid_candidates.sort(key=lambda x: x[2], reverse=True)
             return hybrid_candidates[:top_k]
-        except Exception as e:
+        except Exception:
+            # Fallback ranking if vector ranking fails
+            if recent_seed_ids:
+                candidates.sort(
+                    key=lambda x: (x[2] * (0.75 if x[0].doc_id in recent_seed_ids else 1.0)),
+                    reverse=False,
+                )
             return candidates[:top_k]
 
     def retrieve_seeds(
         self,
         topic: str,
         user_direction: str = "",
-        target_archetype: Optional[ArticleArchetype] = None,
+        target_archetype: ArticleArchetype | None = None,
         count: int = 3,
-    ) -> List[SeedRoleAssignment]:
+    ) -> list[SeedRoleAssignment]:
         """Convenience alias for select_complementary_seeds."""
         return self.select_complementary_seeds(
             topic=topic,
@@ -249,9 +248,9 @@ class SeedRetriever:
         self,
         topic: str,
         direction: str = "",
-        target_archetype: Optional[ArticleArchetype] = None,
+        target_archetype: ArticleArchetype | None = None,
         count: int = 3,
-    ) -> List[SeedRoleAssignment]:
+    ) -> list[SeedRoleAssignment]:
         """
         Stage 2: Role-based complementary seed selection.
         - Seed #1 (Domain & Case Seed): highest topic BM25 relevance & rich notable episodes.
@@ -262,8 +261,9 @@ class SeedRetriever:
         if not candidates:
             return []
 
-        selected: List[SeedRoleAssignment] = []
-        selected_ids: Set[str] = set()
+        selected: list[SeedRoleAssignment] = []
+        selected_ids: set[str] = set()
+        recent_seed_ids = self.repo.get_recently_used_seed_ids(days=7)
 
         is_self_mgmt_relevant = any(
             w in (topic + " " + direction)
@@ -281,8 +281,9 @@ class SeedRetriever:
             episode_bonus = len(meta.notable_episodes) * 0.5
             has_metrics = 1.0 if ReusableAssetType.QUANTITATIVE_METRICS in meta.reusable_asset_types else 0.0
             penalty = -25.0 if (not is_self_mgmt_relevant and meta.primary_category == "자기관리") else 0.0
+            cooldown_penalty = -5.0 if art.doc_id in recent_seed_ids else 0.0
             # FTS5 bm25 rank is negative or lower is better; here invert for sorting
-            return (-rank) + episode_bonus + has_metrics + penalty
+            return (-rank) + episode_bonus + has_metrics + penalty + cooldown_penalty
 
         sorted_seed1 = sorted(candidates, key=score_seed1, reverse=True)
         seed1_art, seed1_meta, _ = sorted_seed1[0]
@@ -324,9 +325,10 @@ class SeedRetriever:
             )
             framework_strength = len(meta.solution_framework) * 0.3
             penalty = -25.0 if (not is_self_mgmt_relevant and meta.primary_category == "자기관리") else 0.0
+            cooldown_penalty = -5.0 if art.doc_id in recent_seed_ids else 0.0
             relevance = max(0.0, -rank) * 0.3
 
-            return relevance + (diversity_score * 2.0) + arch_bonus + cat_bonus + (dir_matches * 1.5) + framework_strength + penalty
+            return relevance + (diversity_score * 2.0) + arch_bonus + cat_bonus + (dir_matches * 1.5) + framework_strength + penalty + cooldown_penalty
 
         sorted_seed2 = sorted(candidates, key=score_seed2, reverse=True)
         seed2_cand = sorted_seed2[0]
@@ -364,8 +366,9 @@ class SeedRetriever:
             }
             asset_matches = sum(1 for a in meta.reusable_asset_types if a in practical_assets)
             has_image = 1.0 if art.image_count > 0 else 0.0
+            cooldown_penalty = -5.0 if art.doc_id in recent_seed_ids else 0.0
 
-            return arch_match + (asset_matches * 1.0) + has_image + penalty
+            return arch_match + (asset_matches * 1.0) + has_image + penalty + cooldown_penalty
 
         sorted_seed3 = sorted(candidates, key=score_seed3, reverse=True)
         seed3_cand = sorted_seed3[0]

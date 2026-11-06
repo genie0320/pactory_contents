@@ -1,7 +1,9 @@
 """Automated unit tests for SynthesisPlanner domain logic."""
 
 from unittest.mock import MagicMock
+
 import pytest
+
 from src.extraction.llm_client import LLMClient
 from src.models import (
     ArticleArchetype,

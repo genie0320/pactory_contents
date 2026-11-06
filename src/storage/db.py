@@ -1,9 +1,9 @@
 """Database initialization and connection management for SQLite3 and FTS5."""
 
+import sqlite3
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator, Union
-import sqlite3
 
 DDL_STATEMENTS = """
 PRAGMA journal_mode = WAL;
@@ -130,10 +130,17 @@ CREATE TABLE IF NOT EXISTS llm_usage_logs (
     estimated_cost_usd REAL DEFAULT 0.0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Performance Optimization Indexes
+CREATE INDEX IF NOT EXISTS idx_articles_status ON articles(status);
+CREATE INDEX IF NOT EXISTS idx_drafts_status ON drafts_and_creations(status);
+CREATE INDEX IF NOT EXISTS idx_drafts_learning ON drafts_and_creations(used_for_style_learning);
+CREATE INDEX IF NOT EXISTS idx_pipeline_jobs_status ON pipeline_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_llm_usage_task ON llm_usage_logs(task_type, created_at);
 """
 
 
-def get_connection(db_path: Union[str, Path]) -> sqlite3.Connection:
+def get_connection(db_path: str | Path) -> sqlite3.Connection:
     """Create a configured SQLite connection."""
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -144,7 +151,7 @@ def get_connection(db_path: Union[str, Path]) -> sqlite3.Connection:
 
 
 @contextmanager
-def get_db(db_path: Union[str, Path]) -> Generator[sqlite3.Connection, None, None]:
+def get_db(db_path: str | Path) -> Generator[sqlite3.Connection, None, None]:
     """Context manager for SQLite database transactions."""
     conn = get_connection(db_path)
     try:
@@ -157,7 +164,7 @@ def get_db(db_path: Union[str, Path]) -> Generator[sqlite3.Connection, None, Non
         conn.close()
 
 
-def init_db(db_path: Union[str, Path]) -> None:
+def init_db(db_path: str | Path) -> None:
     """Initialize database tables and FTS5 virtual tables."""
     conn = get_connection(db_path)
     try:

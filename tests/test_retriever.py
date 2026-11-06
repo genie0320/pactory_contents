@@ -1,6 +1,7 @@
 """Tests for SeedRetriever: FTS5 BM25 search and role-based complementary ranking (Milestone 4)."""
 
 from pathlib import Path
+
 import pytest
 
 from src.config import AppConfig, PathSettings
@@ -8,7 +9,6 @@ from src.models import (
     ArticleArchetype,
     ArticleMetadata,
     ArticleRecord,
-    ArticleStatus,
     ReusableAssetType,
 )
 from src.storage.db import init_db

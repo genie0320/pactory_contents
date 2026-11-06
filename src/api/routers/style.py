@@ -1,9 +1,7 @@
 """Style Learning and Persona Profile API router."""
 
-import json
-from pathlib import Path
-from typing import Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, status
+
 from src.api.auth import verify_auth
 from src.api.schemas.style import (
     StyleLearnRequest,
@@ -109,9 +107,14 @@ async def run_style_learning(req: StyleLearnRequest):
 
     learner = StyleLearner(config=config, repo=repo, llm_client=llm)
     min_count = req.min_finalized_count
+    force_learning = req.force or (min_count <= 1)
 
     try:
-        profile = await learner.learn_style(min_count=min_count, force=(min_count <= 1))
+        profile = await learner.learn_style(
+            min_count=min_count,
+            force=force_learning,
+            window_size=req.window_size,
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -123,7 +126,7 @@ async def run_style_learning(req: StyleLearnRequest):
             success=False,
             learned_creations_count=0,
             updated_profile={},
-            message=f"스타일 학습에 필요한 최소 퇴고 완료 글 수({min_count}편)를 충족하지 못했습니다.",
+            message=f"스타일 학습에 필요한 퇴고 완료 글(최소 {min_count}편)이 충분하지 않습니다. 퇴고 후 '저장'된 글이 있는지 확인해주세요.",
         )
 
     return StyleLearnResponse(

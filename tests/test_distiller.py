@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from unittest.mock import MagicMock
+
 import pytest
 
 from src.config import AppConfig, PathSettings

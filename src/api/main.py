@@ -5,6 +5,7 @@ proofreading, and indexing capabilities.
 """
 
 from pathlib import Path
+
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -12,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from src.api.auth import LoginRequest, LoginResponse, get_configured_password
 from src.api.routers import editor, generator, inbox, observability, style
+from src.config import load_config
 from src.exceptions import LLMServiceError, PactoryError
 
 app = FastAPI(
@@ -87,6 +89,15 @@ app.include_router(generator.router, prefix="/api")
 app.include_router(editor.router, prefix="/api")
 app.include_router(style.router, prefix="/api")
 app.include_router(observability.router, prefix="/api")
+
+# -------------------------------------------------------------
+# Visual Seed Asset Serving
+# -------------------------------------------------------------
+_config = load_config()
+_assets_dir = _config.paths.assets_dir
+_assets_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/api/media/assets", StaticFiles(directory=_assets_dir), name="seed_media_assets")
+
 
 
 # -------------------------------------------------------------
