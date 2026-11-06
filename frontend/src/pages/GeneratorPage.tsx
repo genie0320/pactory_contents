@@ -256,9 +256,20 @@ export const GeneratorPage = ({ onOpenEditor }: GeneratorPageProps) => {
       {step === 1 && (
         <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-xs space-y-6">
           <div>
-            <label className="block text-sm font-bold text-slate-900 mb-1.5">
-              1. 이번에 쓰고자 하는 타깃 주제 (Topic) <span className="text-rose-500">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-sm font-bold text-slate-900">
+                1. 이번에 쓰고자 하는 타깃 주제 (Topic) <span className="text-rose-500">*</span>
+              </label>
+              {topic && (
+                <button
+                  type="button"
+                  onClick={() => setTopic('')}
+                  className="text-xs text-slate-400 hover:text-rose-600 transition-colors"
+                >
+                  지우기
+                </button>
+              )}
+            </div>
             <p className="text-xs text-slate-500 mb-2">
               독자에게 던지고 싶은 핵심 질문이나 다루고자 하는 구체적인 업무/비즈니스 주제를 적어주세요.
             </p>
@@ -266,24 +277,35 @@ export const GeneratorPage = ({ onOpenEditor }: GeneratorPageProps) => {
               type="text"
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
-              placeholder="예: AI 코딩 시대, 기획자의 진짜 존재 이유와 오버엔지니어링 방지법"
-              className="w-full px-4 py-3 rounded-xl border border-slate-300 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-medium"
+              placeholder="작성할 주제나 핵심 화두를 입력하세요 (예: 지속 가능한 프로덕트 개발과 팀 빌딩)"
+              className="w-full px-4 py-3 rounded-xl border border-slate-300 text-slate-900 placeholder:text-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-medium"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-slate-900 mb-1.5">
-              2. 나만의 집필 방향 및 고유 관점 (Perspective / Direction)
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-sm font-bold text-slate-900">
+                2. 나만의 집필 방향 및 고유 관점 (Perspective / Direction)
+              </label>
+              {direction && (
+                <button
+                  type="button"
+                  onClick={() => setDirection('')}
+                  className="text-xs text-slate-400 hover:text-rose-600 transition-colors"
+                >
+                  지우기
+                </button>
+              )}
+            </div>
             <p className="text-xs text-slate-500 mb-2">
-              이 글에서 전개하고 싶은 나의 경험, 독창적인 주장이나 강조하고 싶은 결론을 자유롭게 메모해주세요.
+              이 글에서 전개하고 싶은 나의 경험, 독창적인 주장이나 강조하고 싶은 결론을 자유롭게 메모해주세요. (미입력 시 AI가 기본 중립 모드로 집필)
             </p>
             <textarea
               rows={4}
               value={direction}
               onChange={(e) => setDirection(e.target.value)}
-              placeholder="예: 코딩은 AI가 너무 잘하지만 목적과 방향, 비용 제약은 여전히 기획자가 설정해야 한다. 소규모 친목 모임에 월 50만원 쿠버네티스를 붙여버리는 AI의 맹점을 짚고 진짜 기획자의 3대 점검 기준을 제시한다."
-              className="w-full px-4 py-3 rounded-xl border border-slate-300 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 leading-relaxed"
+              placeholder="글에 담고 싶은 나만의 고유한 경험, 주장, 결론을 메모하세요 (선택 사항)"
+              className="w-full px-4 py-3 rounded-xl border border-slate-300 text-slate-900 placeholder:text-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 leading-relaxed"
             />
           </div>
 
