@@ -221,3 +221,17 @@ export const styleApi = {
       min_finalized_count,
     }).then((r) => r.data),
 };
+
+export interface ObservabilityStats {
+  total_calls: number;
+  total_tokens: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  avg_latency_ms: number;
+  total_cost_usd: number;
+}
+
+export const observabilityApi = {
+  getStats: () => api.get<ObservabilityStats>('/api/observability/stats').then((r) => r.data),
+};
+

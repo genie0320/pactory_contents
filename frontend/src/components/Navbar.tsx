@@ -1,5 +1,7 @@
-import { PenTool, Edit3, BookOpen, Database, Sparkles, RotateCcw, Lock } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { PenTool, Edit3, BookOpen, Database, Sparkles, RotateCcw, Lock, Zap } from 'lucide-react';
 import { useDraftStore } from '../store/useDraftStore';
+import { observabilityApi, type ObservabilityStats } from '../api/client';
 
 export type NavTab = 'generator' | 'editor' | 'library' | 'inbox' | 'style';
 
@@ -11,6 +13,21 @@ interface NavbarProps {
 
 export const Navbar = ({ currentTab, onSelectTab, onOpenAuth }: NavbarProps) => {
   const resetDraft = useDraftStore((s) => s.resetDraft);
+  const [obsStats, setObsStats] = useState<ObservabilityStats | null>(null);
+
+  useEffect(() => {
+    observabilityApi
+      .getStats()
+      .then((data) => setObsStats(data))
+      .catch(() => {});
+    const interval = setInterval(() => {
+      observabilityApi
+        .getStats()
+        .then((data) => setObsStats(data))
+        .catch(() => {});
+    }, 15000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleNewDraft = () => {
     if (window.confirm('현재 작성 중인 입력 내용을 초기화하고 새 글을 시작하시겠습니까?')) {
@@ -112,6 +129,18 @@ export const Navbar = ({ currentTab, onSelectTab, onOpenAuth }: NavbarProps) => 
 
           {/* Quick Actions */}
           <div className="flex items-center space-x-2">
+            {obsStats && obsStats.total_calls > 0 && (
+              <div
+                title={`LLM 호출 ${obsStats.total_calls}회 | 프롬프트: ${obsStats.prompt_tokens.toLocaleString()} tok | 응답: ${obsStats.completion_tokens.toLocaleString()} tok | 평균 지연: ${obsStats.avg_latency_ms}ms`}
+                className="hidden lg:flex items-center space-x-1.5 px-2.5 py-1 text-xs font-mono font-medium text-emerald-700 bg-emerald-50 rounded-lg border border-emerald-200/70"
+              >
+                <Zap className="w-3 h-3 text-emerald-600 fill-emerald-500" />
+                <span>{obsStats.total_tokens.toLocaleString()} tok</span>
+                <span className="text-emerald-500">|</span>
+                <span>${obsStats.total_cost_usd.toFixed(4)}</span>
+              </div>
+            )}
+
             <button
               onClick={handleNewDraft}
               title="현재 작성 상태를 완전 초기화하고 새 글을 시작합니다."

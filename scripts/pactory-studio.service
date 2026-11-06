@@ -1,5 +1,5 @@
 [Unit]
-Description=Seed Content Studio Streamlit Web Application
+Description=Pactory Studio FastAPI + React Application
 After=network.target
 
 [Service]
@@ -8,7 +8,7 @@ WorkingDirectory=%h/pactory_contents
 EnvironmentFile=%h/pactory_contents/.env
 Environment="PATH=%h/pactory_contents/.venv/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="PYTHONPATH=%h/pactory_contents"
-ExecStart=%h/pactory_contents/.venv/bin/streamlit run src/ui/app.py --server.port 8501 --server.address 0.0.0.0 --server.headless true --browser.gatherUsageStats false --server.fileWatcherType none
+ExecStart=%h/pactory_contents/.venv/bin/uvicorn src.api.main:app --host 0.0.0.0 --port 8501
 Restart=always
 RestartSec=5
 

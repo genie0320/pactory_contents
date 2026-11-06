@@ -170,3 +170,15 @@ def test_proofread_endpoint_mocked(mock_review):
     assert data["platform"] == "brunch"
     assert "테스트 진단 리포트" in data["critique_report"]
     assert data["hooking_score"] == 9
+
+
+def test_observability_endpoint():
+    """Verify observability stats endpoint returns aggregated metric keys."""
+    resp = client.get("/api/observability/stats", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "total_calls" in data
+    assert "total_tokens" in data
+    assert "avg_latency_ms" in data
+    assert "total_cost_usd" in data
+

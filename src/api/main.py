@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.api.auth import LoginRequest, LoginResponse, get_configured_password
-from src.api.routers import editor, generator, inbox, style
+from src.api.routers import editor, generator, inbox, observability, style
 from src.exceptions import LLMServiceError, PactoryError
 
 app = FastAPI(
@@ -86,6 +86,7 @@ app.include_router(inbox.router, prefix="/api")
 app.include_router(generator.router, prefix="/api")
 app.include_router(editor.router, prefix="/api")
 app.include_router(style.router, prefix="/api")
+app.include_router(observability.router, prefix="/api")
 
 
 # -------------------------------------------------------------
@@ -96,7 +97,7 @@ FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "di
 if FRONTEND_DIST.exists() and (FRONTEND_DIST / "index.html").exists():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
 
-    @app.get("/{full_path:path}")
+    @app.api_route("/{full_path:path}", methods=["GET", "HEAD"])
     async def serve_spa(full_path: str):
         # Allow API routes through
         if full_path.startswith("api/") or full_path == "api":
