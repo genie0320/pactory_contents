@@ -164,6 +164,19 @@ if "t2_seeds" not in st.session_state or st.session_state["t2_seeds"] is None:
     st.session_state["t2_seeds"] = []
 if "t2_blueprint" not in st.session_state:
     st.session_state["t2_blueprint"] = None
+if "t2_reset_id" not in st.session_state:
+    st.session_state["t2_reset_id"] = 0
+
+def reset_generator_state():
+    """Completely resets Tab 2 generator state and rotates widget keys to prevent browser state shadowing."""
+    st.session_state["t2_reset_id"] = st.session_state.get("t2_reset_id", 0) + 1
+    st.session_state["t2_step"] = 1
+    st.session_state["t2_topic"] = ""
+    st.session_state["t2_direction"] = ""
+    st.session_state["t2_seeds"] = []
+    st.session_state["t2_blueprint"] = None
+    st.session_state["t2_synthesis_done"] = False
+    st.session_state["active_creation_id"] = None
 
 # Sidebar: Environment & Studio Status
 with st.sidebar:
@@ -508,11 +521,15 @@ with tabs[0]:
 # TAB 2: 초안 생성 (Draft Generator)
 # -------------------------------------------------------------
 with tabs[1]:
-    t2_c1, t2_c2 = st.columns([3, 1])
+    t2_c1, t2_c2, t2_c3 = st.columns([3, 1.2, 1])
     with t2_c1:
         st.header("2. 상호보완 Seed 선별 및 중립 초안 생성")
     with t2_c2:
         st.info(f"✍️ 초안 AI: `{synth_llm.model}` ({synth_llm.thinking_level.upper()})")
+    with t2_c3:
+        if st.button("🧹 새 글 쓰기 (전체 초기화)", help="현재 진행 중인 단계를 모두 취소하고 1단계 백지 상태로 완전히 새로 시작합니다.", use_container_width=True):
+            reset_generator_state()
+            st.rerun()
 
     # Step indicators
     current_step = st.session_state.get("t2_step", 1)
@@ -535,37 +552,28 @@ with tabs[1]:
             st.subheader("💡 1단계. 타깃 주제와 나만의 관점/경험담 입력")
         with step1_h_col2:
             if st.button("🧹 새 글 쓰기 (입력 초기화)", help="이전에 입력된 주제와 방향성 메모를 모두 비우고 깨끗한 백지 상태로 시작합니다.", use_container_width=True):
-                st.session_state["t2_step"] = 1
-                st.session_state["t2_topic"] = ""
-                st.session_state["t2_direction"] = ""
-                st.session_state["t2_seeds"] = []
-                st.session_state["t2_blueprint"] = None
-                st.session_state["t2_synthesis_done"] = False
-                st.session_state["active_creation_id"] = None
-                st.session_state["t2_input_topic"] = ""
-                st.session_state["t2_input_direction"] = ""
+                reset_generator_state()
                 st.rerun()
 
+        cur_reset_id = st.session_state.get("t2_reset_id", 0)
         t_val = st.text_input(
             "새로 작성할 타깃 주제 (Topic)",
             value=st.session_state.get("t2_topic", ""),
             placeholder="예: 생성형 AI 시대, 비즈니스 기획자가 갖춰야 할 진짜 경쟁력",
-            key="t2_input_topic",
+            key=f"t2_input_topic_{cur_reset_id}",
         )
         d_val = st.text_area(
             "집필 방향 및 나만의 고유한 관점/경험담 (Direction)",
             value=st.session_state.get("t2_direction", ""),
             placeholder="자신만의 주장, 현장 경험, 차별화된 문제의식 등을 자유롭게 서술하세요.",
             height=200,
-            key="t2_input_direction",
+            key=f"t2_input_direction_{cur_reset_id}",
         )
         st.caption(f"📝 입력 상태: 타깃 주제 **{len(t_val):,}자** | 집필 방향/관점 **{len(d_val):,}자**")
 
-        # Real-time state synchronization: Keep t2_topic and t2_direction up to date
-        if t_val != st.session_state.get("t2_topic"):
-            st.session_state["t2_topic"] = t_val
-        if d_val != st.session_state.get("t2_direction"):
-            st.session_state["t2_direction"] = d_val
+        # Real-time state synchronization
+        st.session_state["t2_topic"] = t_val
+        st.session_state["t2_direction"] = d_val
 
         col_cfg1, col_cfg2, col_cfg3 = st.columns([2, 1, 1])
         with col_cfg1:
@@ -635,6 +643,12 @@ with tabs[1]:
                 """,
                 unsafe_allow_html=True,
             )
+        
+        b_c1, b_c2 = st.columns([7, 3])
+        with b_c2:
+            if st.button("🗑️ 관점 비우고 1단계로 새로 쓰기", help="현재 관점/방향성 내용을 비우고 1단계로 돌아갑니다.", use_container_width=True):
+                reset_generator_state()
+                st.rerun()
         st.write("")
 
         c_seeds = st.session_state.get("t2_seeds") or []
@@ -708,15 +722,7 @@ with tabs[1]:
                         st.error(f"⚠️ 다시 기획 중 오류 발생: {e}")
         with col_nav3:
             if st.button("🧹 처음부터 새로 작성", use_container_width=True):
-                st.session_state["t2_step"] = 1
-                st.session_state["t2_topic"] = ""
-                st.session_state["t2_direction"] = ""
-                st.session_state["t2_seeds"] = []
-                st.session_state["t2_blueprint"] = None
-                st.session_state["t2_synthesis_done"] = False
-                st.session_state["active_creation_id"] = None
-                st.session_state["t2_input_topic"] = ""
-                st.session_state["t2_input_direction"] = ""
+                reset_generator_state()
                 st.rerun()
         with col_nav4:
             if st.button(
@@ -815,15 +821,7 @@ with tabs[1]:
                     st.rerun()
             with c_go3:
                 if st.button("✨ 새로운 주제로 새 글 작성", type="secondary", use_container_width=True):
-                    st.session_state["t2_step"] = 1
-                    st.session_state["t2_topic"] = ""
-                    st.session_state["t2_direction"] = ""
-                    st.session_state["t2_seeds"] = []
-                    st.session_state["t2_blueprint"] = None
-                    st.session_state["t2_synthesis_done"] = False
-                    st.session_state["active_creation_id"] = None
-                    st.session_state["t2_input_topic"] = ""
-                    st.session_state["t2_input_direction"] = ""
+                    reset_generator_state()
                     st.rerun()
 
 # -------------------------------------------------------------
