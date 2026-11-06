@@ -1,4 +1,5 @@
 import pytest
+from src.extraction.llm_client import LLMClient
 from src.synthesis.proofreader import ArticleProofreader
 
 SAMPLE_TEXT = """# 기깔나는 '아이디어'만으로는 승부할 수 없다
@@ -16,7 +17,7 @@ SAMPLE_TEXT = """# 기깔나는 '아이디어'만으로는 승부할 수 없다
 """
 
 def test_proofreader_report_mode():
-    proofreader = ArticleProofreader()
+    proofreader = ArticleProofreader(llm_client=LLMClient(api_key=""))
     res = proofreader.review_sync(
         content=SAMPLE_TEXT,
         platform="brunch",
@@ -30,7 +31,7 @@ def test_proofreader_report_mode():
     assert res["rewritten_text"] is None
 
 def test_proofreader_rewrite_mode_all_platforms():
-    proofreader = ArticleProofreader()
+    proofreader = ArticleProofreader(llm_client=LLMClient(api_key=""))
     for platform in ["threads", "linkedin", "brunch", "general"]:
         res = proofreader.review_sync(
             content=SAMPLE_TEXT,
@@ -63,7 +64,7 @@ topic: AI 기획
     assert body2 == "# 제목\n내용"
 
 def test_proofreader_episode2_ai_planning():
-    proofreader = ArticleProofreader()
+    proofreader = ArticleProofreader(llm_client=LLMClient(api_key=""))
     ep2_text = """# "기획은 AI가 잘해요" 정말 그럴까요?
 300명이 이용하는 회원수첩앱에 한달 이용료가 50만원이나 나오는 클라우드 스펙 오버엔지니어링.
 코딩은 AI가 너무 잘하지만 목적과 방향은 기획자가 설정해야 합니다.

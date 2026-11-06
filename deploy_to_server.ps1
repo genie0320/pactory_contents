@@ -31,7 +31,7 @@ Remove-Item $tempArchive -Force
 
 # 3. 서버에서 압축 해제 및 서비스 재시작
 Write-Host "[3/4] 서버 소스코드 갱신 및 웹 서비스 재기동..." -ForegroundColor Yellow
-$remoteCmd = "cd ~/pactory_contents && tar -xzf deploy_code_tmp.tar.gz && rm deploy_code_tmp.tar.gz && chmod +x scripts/*.sh && cp scripts/*.service scripts/*.timer ~/.config/systemd/user/ && systemctl --user daemon-reload"
+$remoteCmd = "cd ~/pactory_contents && tar -xzf deploy_code_tmp.tar.gz && rm deploy_code_tmp.tar.gz && chmod +x scripts/*.sh && cp scripts/*.service scripts/*.timer ~/.config/systemd/user/ && systemctl --user daemon-reload && systemctl --user enable --now pactory-indexer.timer pactory-backup.timer"
 if ($InstallDeps) {
     $remoteCmd += " && .venv/bin/pip install -e ."
 }

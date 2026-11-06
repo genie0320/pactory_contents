@@ -90,6 +90,46 @@ def show_lightbox_dialog(img_path: str, asset_id: str, doc_id: str, page_no: int
 
 
 # Session State defaults
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+
+studio_password = os.getenv("STUDIO_PASSWORD", "").strip()
+
+# P0-1: Authentication Gate (Public IP Access Protection)
+if studio_password and not st.session_state["authenticated"]:
+    st.markdown(
+        """
+        <style>
+        .auth-card {
+            max-width: 440px;
+            margin: 60px auto;
+            padding: 30px;
+            background: #ffffff;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+            text-align: center;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    col1, col2, col3 = st.columns([1, 1.4, 1])
+    with col2:
+        st.title("🔒 Seed Content Studio")
+        st.markdown("**비공개 작업 스튜디오**입니다. 접근 비밀번호를 입력해주세요.")
+        with st.form("auth_form", clear_on_submit=False):
+            pwd_input = st.text_input("스튜디오 비밀번호", type="password", placeholder="비밀번호를 입력하세요")
+            submit_btn = st.form_submit_button("스튜디오 입장", use_container_width=True, type="primary")
+            if submit_btn:
+                if pwd_input == studio_password:
+                    st.session_state["authenticated"] = True
+                    st.success("인증 완료. 스튜디오에 입장합니다...")
+                    st.rerun()
+                else:
+                    st.error("비밀번호가 일치하지 않습니다.")
+    st.stop()
+
 if "active_creation_id" not in st.session_state:
     st.session_state["active_creation_id"] = None
 if "editor_text" not in st.session_state:
@@ -256,6 +296,15 @@ with st.sidebar:
     else:
         st.caption(f"💡 앞으로 {5 - len(fin_list)}편 더 확정 시 나만의 문체 스타일이 AI에 완전 동기화됩니다.")
 
+    if getattr(llm, "last_fallback_info", None):
+        st.info(f"⚡ {llm.last_fallback_info}")
+
+    if studio_password:
+        st.divider()
+        if st.button("🔒 스튜디오 잠금 (로그아웃)", use_container_width=True):
+            st.session_state["authenticated"] = False
+            st.rerun()
+
 st.title("🌱 Seed Synthesis Content Studio")
 st.caption("초안 복제를 방지하는 탈색(Distillation) 기반 상호보완 아티클 스튜디오 & 나만의 스타일 학습 루프")
 
@@ -271,7 +320,45 @@ tabs = st.tabs([
 # -------------------------------------------------------------
 with tabs[0]:
     st.header("1. 파이프라인 실시간 모니터링 & Seed 코퍼스")
-    
+
+    # Inbound Direct Uploader (P0-2)
+    with st.expander("📥 신규 문서 브라우저 직접 업로드 (Web Drag & Drop Ingestion)", expanded=True):
+        st.caption("PDF, DOCX, TXT, 마크다운(MD) 문서를 여기에 끌어다 놓으면 서버 `data/inbox/`로 즉시 저장되고 색인 파이프라인을 실행할 수 있습니다.")
+        uploaded_files = st.file_uploader(
+            "문서 파일 선택 또는 드래그앤드롭",
+            type=["pdf", "docx", "txt", "md"],
+            accept_multiple_files=True,
+            key="inbox_direct_uploader",
+            help="여러 파일을 동시에 선택하거나 탐색기에서 드래그하여 업로드할 수 있습니다.",
+        )
+        if uploaded_files:
+            up_col1, up_col2 = st.columns([3, 1])
+            with up_col1:
+                st.info(f"선택된 파일: **{len(uploaded_files)}개** ({', '.join(f.name for f in uploaded_files)})")
+            with up_col2:
+                if st.button("⚡ 서버 저장 & 즉시 색인", type="primary", use_container_width=True):
+                    inbox_dir = config.paths.inbox_dir
+                    inbox_dir.mkdir(parents=True, exist_ok=True)
+                    saved_count = 0
+                    for uf in uploaded_files:
+                        dest_path = inbox_dir / uf.name
+                        dest_path.write_bytes(uf.getbuffer())
+                        saved_count += 1
+
+                    with st.status(f"{saved_count}개 문서 저장 완료. 파이프라인 실행 중...", expanded=True) as status_box:
+                        st.write("1단계: Inbox 스캔 및 텍스트/이미지 분리 추출 중...")
+                        scanned_records = scanner.scan_inbox()
+                        st.write(f"  └ {len(scanned_records)}건 추출 완료")
+
+                        st.write("2단계: 메타데이터 추출 및 FTS5 색인 중...")
+                        indexed_records = extractor.run_sync()
+                        st.write(f"  └ {len(indexed_records)}건 색인 등록 완료")
+
+                        status_box.update(label="🎉 파일 업로드 및 전체 색인 파이프라인 완료!", state="complete", expanded=False)
+                    st.success(f"총 {saved_count}개 파일이 정상적으로 수집 및 색인되었습니다.")
+                    st.rerun()
+
+    st.markdown("---")
     col_act1, col_act2, col_act3 = st.columns([2, 2, 4])
     with col_act1:
         if st.button("📥 Inbox 신규 파일 수집 (Ingest)", use_container_width=True):

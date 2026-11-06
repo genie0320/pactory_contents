@@ -16,13 +16,14 @@ logger = logging.getLogger("llm_client")
 T = TypeVar("T", bound=BaseModel)
 
 # Candidate fallback models when a Gemini model fails with 503/504
-GEMINI_FALLBACK_CANDIDATES = ["gemini-3.5-flash-lite", "gemini-3.5-flash"]
+GEMINI_FALLBACK_CANDIDATES = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-2.5-flash"]
 
 
 def is_retryable_error(exc: Exception) -> bool:
     """Check if exception is a transient error eligible for retry."""
     err_msg = str(exc).upper()
-    return any(k in err_msg for k in ["503", "504", "429", "UNAVAILABLE", "DEADLINE_EXCEEDED", "RESOURCE_EXHAUSTED", "HIGH DEMAND"])
+    return any(k in err_msg for k in ["503", "504", "429", "UNAVAILABLE", "DEADLINE_EXCEEDED", "RESOURCE_EXHAUSTED", "HIGH DEMAND", "OVERLOADED"])
+
 
 
 def retry_sync(func, max_retries: int = 3, base_delay: float = 1.5):
@@ -96,6 +97,7 @@ class LLMClient:
             self.model = model or os.getenv("DEFAULT_MODEL", "gpt-4o-mini")
             self.api_key = api_key or openai_key
 
+        self.last_fallback_info: Optional[str] = None
         self.init_clients()
 
     def init_clients(self):
@@ -128,6 +130,7 @@ class LLMClient:
         self.provider = provider.lower()
         if model:
             self.model = model
+        self.last_fallback_info: Optional[str] = None
         self.init_clients()
 
     def set_thinking_level(self, level: str):
@@ -168,7 +171,9 @@ class LLMClient:
             raise RuntimeError(f"Gemini returned empty response for model {self.model}")
 
         try:
-            return retry_sync(_invoke_primary, max_retries=3, base_delay=1.5)
+            res = retry_sync(_invoke_primary, max_retries=3, base_delay=1.5)
+            self.last_fallback_info = None
+            return res
         except Exception as primary_err:
             fallbacks = [m for m in GEMINI_FALLBACK_CANDIDATES if m != self.model]
             if not fallbacks and self.model == "gemini-3.5-flash-lite":
@@ -196,7 +201,9 @@ class LLMClient:
                             return fb_resp.text
                         raise RuntimeError(f"Gemini returned empty response for fallback model {fb_model}")
 
-                    return retry_sync(_invoke_fallback, max_retries=2, base_delay=2.0)
+                    res = retry_sync(_invoke_fallback, max_retries=2, base_delay=2.0)
+                    self.last_fallback_info = f"메인 모델({self.model}) 지연으로 보조 모델({fb_model})로 자동 전환 처리됨"
+                    return res
                 except Exception as fb_err:
                     logger.error(f"Fallback to '{fb_model}' also failed: {fb_err}")
 
@@ -218,7 +225,9 @@ class LLMClient:
             raise RuntimeError(f"Gemini returned empty response for model {self.model}")
 
         try:
-            return await retry_async(_invoke_primary, max_retries=3, base_delay=1.5)
+            res = await retry_async(_invoke_primary, max_retries=3, base_delay=1.5)
+            self.last_fallback_info = None
+            return res
         except Exception as primary_err:
             fallbacks = [m for m in GEMINI_FALLBACK_CANDIDATES if m != self.model]
             if not fallbacks and self.model == "gemini-3.5-flash-lite":
@@ -246,7 +255,9 @@ class LLMClient:
                             return fb_resp.text
                         raise RuntimeError(f"Gemini returned empty response for fallback model {fb_model}")
 
-                    return await retry_async(_invoke_fallback, max_retries=2, base_delay=2.0)
+                    res = await retry_async(_invoke_fallback, max_retries=2, base_delay=2.0)
+                    self.last_fallback_info = f"메인 모델({self.model}) 지연으로 보조 모델({fb_model})로 자동 전환 처리됨"
+                    return res
                 except Exception as fb_err:
                     logger.error(f"Async fallback to '{fb_model}' also failed: {fb_err}")
 
