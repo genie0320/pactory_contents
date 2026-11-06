@@ -530,7 +530,22 @@ with tabs[1]:
 
     # Step 1: Input Topic & Direction
     if current_step == 1:
-        st.subheader("💡 1단계. 타깃 주제와 나만의 관점/경험담 입력")
+        step1_h_col1, step1_h_col2 = st.columns([3, 1])
+        with step1_h_col1:
+            st.subheader("💡 1단계. 타깃 주제와 나만의 관점/경험담 입력")
+        with step1_h_col2:
+            if st.button("🧹 새 글 쓰기 (입력 초기화)", help="이전에 입력된 주제와 방향성 메모를 모두 비우고 깨끗한 백지 상태로 시작합니다.", use_container_width=True):
+                st.session_state["t2_step"] = 1
+                st.session_state["t2_topic"] = ""
+                st.session_state["t2_direction"] = ""
+                st.session_state["t2_seeds"] = []
+                st.session_state["t2_blueprint"] = None
+                st.session_state["t2_synthesis_done"] = False
+                st.session_state["active_creation_id"] = None
+                st.session_state["t2_input_topic"] = ""
+                st.session_state["t2_input_direction"] = ""
+                st.rerun()
+
         t_val = st.text_input(
             "새로 작성할 타깃 주제 (Topic)",
             value=st.session_state.get("t2_topic", ""),
@@ -544,6 +559,7 @@ with tabs[1]:
             height=200,
             key="t2_input_direction",
         )
+        st.caption(f"📝 입력 상태: 타깃 주제 **{len(t_val):,}자** | 집필 방향/관점 **{len(d_val):,}자**")
 
         # Real-time state synchronization: Keep t2_topic and t2_direction up to date
         if t_val != st.session_state.get("t2_topic"):
@@ -597,18 +613,29 @@ with tabs[1]:
         cur_t = st.session_state.get("t2_topic", "")
         cur_d = st.session_state.get("t2_direction", "")
 
-        # Target Topic & Context Confirmation Banner
-        st.markdown(
-            f"""
-            <div style="background-color: rgba(30, 136, 229, 0.08); border-left: 4px solid #1E88E5; padding: 12px 16px; border-radius: 6px; margin-bottom: 16px;">
-                <div style="font-size: 13px; font-weight: 700; color: #1565C0; margin-bottom: 4px;">🎯 1단계에서 확정한 타깃 주제</div>
-                <div style="font-size: 16px; font-weight: 700; color: #111; margin-bottom: 6px;">{cur_t or '미지정'}</div>
-                <div style="font-size: 12px; font-weight: 700; color: #555; margin-bottom: 4px;">🧭 나만의 집필 방향 및 고유 관점 (Context)</div>
-                <div style="font-size: 13px; color: #333; line-height: 1.5; white-space: pre-wrap;">{cur_d or '미지정'}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        # Target Topic & Context Confirmation Banner (2 distinct cards for clarity)
+        col_banner1, col_banner2 = st.columns([1, 1])
+        with col_banner1:
+            st.markdown(
+                f"""
+                <div style="background-color: rgba(30, 136, 229, 0.08); border-left: 4px solid #1E88E5; padding: 12px 16px; border-radius: 6px; height: 100%;">
+                    <div style="font-size: 12px; font-weight: 700; color: #1565C0; margin-bottom: 4px;">🎯 1단계 타깃 주제 (Topic) <span style="font-size: 11px; font-weight: 400; color: #666;">({len(cur_t):,}자)</span></div>
+                    <div style="font-size: 15px; font-weight: 700; color: #111; line-height: 1.4;">{cur_t or '(주제 미지정)'}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with col_banner2:
+            st.markdown(
+                f"""
+                <div style="background-color: rgba(67, 160, 71, 0.08); border-left: 4px solid #43A047; padding: 12px 16px; border-radius: 6px; height: 100%;">
+                    <div style="font-size: 12px; font-weight: 700; color: #2E7D32; margin-bottom: 4px;">🧭 나만의 집필 방향 및 고유 관점 (Context) <span style="font-size: 11px; font-weight: 400; color: #666;">({len(cur_d):,}자)</span></div>
+                    <div style="font-size: 13px; color: #222; line-height: 1.5; max-height: 120px; overflow-y: auto; white-space: pre-wrap;">{cur_d or '(관점 미지정 - 기본 아키타입 적용)'}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        st.write("")
 
         c_seeds = st.session_state.get("t2_seeds") or []
         bp = st.session_state.get("t2_blueprint")
@@ -659,13 +686,13 @@ with tabs[1]:
                             st.warning("Google Gemini API 통신 지연 또는 일시 혼잡일 수 있습니다. 사이드바에서 다른 모델(예: gemini-3.5-flash-lite)을 선택하거나 잠시 후 다시 시도해 주세요.")
 
         st.divider()
-        col_nav1, col_nav2, col_nav3 = st.columns([1, 1, 2])
+        col_nav1, col_nav2, col_nav3, col_nav4 = st.columns([1, 1, 1, 2])
         with col_nav1:
             if st.button("⬅️ 1단계로 돌아가서 수정", use_container_width=True):
                 st.session_state["t2_step"] = 1
                 st.rerun()
         with col_nav2:
-            if st.button("🔄 AI 설계도 다시 기획하기", disabled=(bp is None), use_container_width=True):
+            if st.button("🔄 AI 설계도 다시 기획", disabled=(bp is None), use_container_width=True):
                 with st.spinner(f"AI({curr_m})가 새로운 관점의 설계도를 다시 기획 중입니다..."):
                     try:
                         new_bp = synthesizer.planner.plan_blueprint_sync(
@@ -680,6 +707,18 @@ with tabs[1]:
                     except Exception as e:
                         st.error(f"⚠️ 다시 기획 중 오류 발생: {e}")
         with col_nav3:
+            if st.button("🧹 처음부터 새로 작성", use_container_width=True):
+                st.session_state["t2_step"] = 1
+                st.session_state["t2_topic"] = ""
+                st.session_state["t2_direction"] = ""
+                st.session_state["t2_seeds"] = []
+                st.session_state["t2_blueprint"] = None
+                st.session_state["t2_synthesis_done"] = False
+                st.session_state["active_creation_id"] = None
+                st.session_state["t2_input_topic"] = ""
+                st.session_state["t2_input_direction"] = ""
+                st.rerun()
+        with col_nav4:
             if st.button(
                 "다음 3단계: AI 중립 초안 집필 시작 🚀",
                 type="primary",
@@ -775,7 +814,7 @@ with tabs[1]:
                     st.session_state["t2_step"] = 2
                     st.rerun()
             with c_go3:
-                if st.button("🔄 새로운 주제로 다시 시작", type="secondary", use_container_width=True):
+                if st.button("✨ 새로운 주제로 새 글 작성", type="secondary", use_container_width=True):
                     st.session_state["t2_step"] = 1
                     st.session_state["t2_topic"] = ""
                     st.session_state["t2_direction"] = ""
@@ -783,6 +822,8 @@ with tabs[1]:
                     st.session_state["t2_blueprint"] = None
                     st.session_state["t2_synthesis_done"] = False
                     st.session_state["active_creation_id"] = None
+                    st.session_state["t2_input_topic"] = ""
+                    st.session_state["t2_input_direction"] = ""
                     st.rerun()
 
 # -------------------------------------------------------------
