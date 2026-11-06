@@ -1156,7 +1156,7 @@ with tabs[2]:
                 with col_refine_input:
                     extra_feedback_input = st.text_input(
                         "✍️ 추가 반영 요청사항 (선택사항)",
-                        placeholder="예: 도입부 훅을 더 강하게 하고, 300명 회원수첩 일화의 비용 참사를 더 부각해 줘.",
+                        placeholder="예: 도입부 훅을 더 강하게 하고, 실전 비즈니스 적용 사례를 더 부각해 줘.",
                         key=f"extra_refine_{selected_cid or 'default'}",
                     )
                 with col_refine_act:
