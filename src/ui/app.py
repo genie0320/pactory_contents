@@ -47,16 +47,34 @@ def get_services():
     config.ensure_directories()
     init_db(config.paths.db_path)
     repo = StorageRepository(db_path=config.paths.db_path, processed_dir=config.paths.processed_dir)
-    llm = LLMClient()
-    retriever = SeedRetriever(config=config, repo=repo)
-    synthesizer = ArticleSynthesizer(config=config, repo=repo, llm_client=llm)
-    style_learner = StyleLearner(config=config, repo=repo, llm_client=llm)
-    scanner = IngestionScanner(config=config, repo=repo)
-    extractor = BatchMetadataExtractor(config=config, repo=repo, llm_client=llm)
-    proofreader = ArticleProofreader(config=config, llm_client=llm)
-    return config, repo, llm, retriever, synthesizer, style_learner, scanner, extractor, proofreader
 
-config, repo, llm, retriever, synthesizer, style_learner, scanner, extractor, proofreader = get_services()
+    # 1. 색인/추출 전용 LLM (기본: 3.5 Flash-Lite, Low Thinking)
+    extract_model = os.getenv("EXTRACTION_MODEL", "gemini-3.5-flash-lite")
+    extract_effort = os.getenv("EXTRACTION_THINKING_LEVEL", "low")
+    extract_llm = LLMClient(model=extract_model)
+    extract_llm.set_thinking_level(extract_effort)
+
+    # 2. 초안 기획/합성 전용 LLM (기본: 3.8 Flash, Medium Thinking)
+    synth_model = os.getenv("SYNTHESIS_MODEL", "gemini-3.8-flash")
+    synth_effort = os.getenv("SYNTHESIS_THINKING_LEVEL", "medium")
+    synth_llm = LLMClient(model=synth_model)
+    synth_llm.set_thinking_level(synth_effort)
+
+    # 3. 검토/퇴고 전용 LLM (기본: 3.8 Pro, High Thinking)
+    proof_model = os.getenv("PROOFREADING_MODEL", "gemini-3.8-pro")
+    proof_effort = os.getenv("PROOFREADING_THINKING_LEVEL", "high")
+    proof_llm = LLMClient(model=proof_model)
+    proof_llm.set_thinking_level(proof_effort)
+
+    retriever = SeedRetriever(config=config, repo=repo)
+    synthesizer = ArticleSynthesizer(config=config, repo=repo, llm_client=synth_llm)
+    style_learner = StyleLearner(config=config, repo=repo, llm_client=synth_llm)
+    scanner = IngestionScanner(config=config, repo=repo)
+    extractor = BatchMetadataExtractor(config=config, repo=repo, llm_client=extract_llm)
+    proofreader = ArticleProofreader(config=config, llm_client=proof_llm)
+    return config, repo, extract_llm, synth_llm, proof_llm, retriever, synthesizer, style_learner, scanner, extractor, proofreader
+
+config, repo, extract_llm, synth_llm, proof_llm, retriever, synthesizer, style_learner, scanner, extractor, proofreader = get_services()
 
 
 def resolve_asset_path(raw_path: str) -> Optional[Path]:
@@ -151,20 +169,26 @@ if "t2_blueprint" not in st.session_state:
 with st.sidebar:
     st.header("⚙️ 스튜디오 환경 & 제어")
 
-    has_gemini = bool(os.getenv("GEMINI_API_KEY") or (getattr(llm, "provider", "") == "gemini" and getattr(llm, "api_key", None)))
-    has_openai = bool(os.getenv("OPENAI_API_KEY") or (getattr(llm, "provider", "") == "openai" and getattr(llm, "api_key", None)))
-
-    curr_model = getattr(llm, "model", "gemini-3.5-flash-lite")
-    curr_effort = getattr(llm, "thinking_level", "low")
+    has_gemini = bool(os.getenv("GEMINI_API_KEY") or (getattr(extract_llm, "provider", "") == "gemini" and getattr(extract_llm, "api_key", None)))
+    has_openai = bool(os.getenv("OPENAI_API_KEY") or (getattr(extract_llm, "provider", "") == "openai" and getattr(extract_llm, "api_key", None)))
 
     if has_gemini:
-        st.success(f"🟢 Gemini ({curr_model} | {curr_effort.upper()})\n실시간 AI 추론 모드")
+        st.success("🟢 Gemini 실시간 AI 엔진 활성")
     elif has_openai:
-        st.success(f"🟢 OpenAI ({curr_model} | {curr_effort.upper()})\n실시간 AI 추론 모드")
+        st.success("🟢 OpenAI 실시간 AI 엔진 활성")
     else:
-        st.warning(f"⚠️ API 키 미설정\n(.env 파일에 GEMINI_API_KEY를 설정해 주세요.)")
+        st.warning("⚠️ API 키 미설정\n(.env 파일에 GEMINI_API_KEY를 설정해 주세요.)")
 
-    # Dynamic Model Selector
+    # Current Per-Task Model Status
+    st.markdown("#### 🧠 작업별 AI 모델 현황")
+    st.markdown(
+        f"""
+- 📑 **색인/추출**: `{extract_llm.model}` (`{extract_llm.thinking_level.upper()}`)
+- ✍️ **초안 생성**: `{synth_llm.model}` (`{synth_llm.thinking_level.upper()}`)
+- 🔍 **검토/퇴고**: `{proof_llm.model}` (`{proof_llm.thinking_level.upper()}`)
+"""
+    )
+
     model_options = [
         "gemini-3.5-flash-lite",
         "gemini-3.8-flash",
@@ -173,81 +197,90 @@ with st.sidebar:
         "gpt-4o-mini",
         "gpt-4o",
     ]
-    if curr_model not in model_options:
-        model_options.insert(0, curr_model)
-
-    selected_model = st.selectbox(
-        "🧠 AI 추론 모델 선택",
-        options=model_options,
-        index=model_options.index(curr_model) if curr_model in model_options else 0,
-        help="안정적이고 빠른 gemini-3.5-flash-lite가 기본이며, 필요 시 3.8 Flash 또는 3.8 Pro 모델로 전환할 수 있습니다.",
-    )
-
-    # Thinking / Reasoning Effort Selector
     effort_options = ["low", "medium", "high"]
     effort_labels = {
-        "low": "⚡ Low (빠른 속도 & 대량 색인 최적)",
-        "medium": "⚖️ Medium (균형 - 일상 초안 추천)",
-        "high": "🧠 High (심층 사유 & 출판급 퇴고)",
+        "low": "⚡ Low (빠른 속도 & 대량 처리)",
+        "medium": "⚖️ Medium (균형 - 일상 초안)",
+        "high": "🧠 High (심층 사유 & 정밀도)",
     }
-    selected_effort = st.select_slider(
-        "🎚️ 추론 강도 (Thinking Effort)",
-        options=effort_options,
-        value=curr_effort if curr_effort in effort_options else "medium",
-        format_func=lambda x: effort_labels.get(x, x),
-        help="Gemini 3.8 / 3.x 모델의 사고 깊이(Thinking Budget/Level)를 조절합니다.",
-    )
 
-    # Apply Model / Effort changes
-    need_rerun = False
-    if selected_model != curr_model:
-        llm.model = selected_model
-        proofreader.llm_client.model = selected_model
-        synthesizer.llm_client.model = selected_model
-        extractor.llm_client.model = selected_model
-        style_learner.llm_client.model = selected_model
-        need_rerun = True
+    # Helper function to save per-task models to .env
+    def _save_task_models(e_m, e_l, s_m, s_l, p_m, p_l):
+        extract_llm.model = e_m
+        extract_llm.set_thinking_level(e_l)
+        extractor.llm_client.model = e_m
+        extractor.llm_client.set_thinking_level(e_l)
 
-    if selected_effort != curr_effort:
-        llm.set_thinking_level(selected_effort)
-        proofreader.llm_client.set_thinking_level(selected_effort)
-        synthesizer.llm_client.set_thinking_level(selected_effort)
-        extractor.llm_client.set_thinking_level(selected_effort)
-        style_learner.llm_client.set_thinking_level(selected_effort)
-        need_rerun = True
+        synth_llm.model = s_m
+        synth_llm.set_thinking_level(s_l)
+        synthesizer.llm_client.model = s_m
+        synthesizer.llm_client.set_thinking_level(s_l)
+        style_learner.llm_client.model = s_m
+        style_learner.llm_client.set_thinking_level(s_l)
 
-    if need_rerun:
+        proof_llm.model = p_m
+        proof_llm.set_thinking_level(p_l)
+        proofreader.llm_client.model = p_m
+        proofreader.llm_client.set_thinking_level(p_l)
+
         env_path = Path(".env")
         if env_path.exists():
-            env_lines = env_path.read_text(encoding="utf-8").splitlines()
-            new_lines = [l for l in env_lines if not l.startswith("DEFAULT_MODEL=") and not l.startswith("DEFAULT_THINKING_LEVEL=")]
-            new_lines.append(f"DEFAULT_MODEL={selected_model}")
-            new_lines.append(f"DEFAULT_THINKING_LEVEL={selected_effort}")
+            lines = env_path.read_text(encoding="utf-8").splitlines()
+            skip_prefixes = [
+                "EXTRACTION_MODEL=", "EXTRACTION_THINKING_LEVEL=",
+                "SYNTHESIS_MODEL=", "SYNTHESIS_THINKING_LEVEL=",
+                "PROOFREADING_MODEL=", "PROOFREADING_THINKING_LEVEL="
+            ]
+            new_lines = [l for l in lines if not any(l.startswith(p) for p in skip_prefixes)]
+            new_lines.extend([
+                f"EXTRACTION_MODEL={e_m}",
+                f"EXTRACTION_THINKING_LEVEL={e_l}",
+                f"SYNTHESIS_MODEL={s_m}",
+                f"SYNTHESIS_THINKING_LEVEL={s_l}",
+                f"PROOFREADING_MODEL={p_m}",
+                f"PROOFREADING_THINKING_LEVEL={p_l}",
+            ])
             env_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
-        st.rerun()
 
-    # Recommended Workload Preset Pairs
-    with st.expander("🎯 작업별 추천 프리셋 페어 (1-Click)", expanded=False):
-        if st.button("🚀 [가성비 쾌속 페어]\n3.8 Flash + Medium Effort", use_container_width=True):
-            llm.model = "gemini-3.8-flash"
-            llm.set_thinking_level("medium")
-            for svc in [proofreader, synthesizer, extractor, style_learner]:
-                svc.llm_client.model = "gemini-3.8-flash"
-                svc.llm_client.set_thinking_level("medium")
+    # Granular Per-Task Model Configuration
+    with st.expander("🎛️ 작업별 AI 모델 상세 설정", expanded=False):
+        st.caption("색인, 초안 생성, 퇴고 단계에 각기 다른 최적 모델을 독립적으로 지정할 수 있습니다.")
+
+        st.markdown("**📑 1. 색인 & 메타데이터 추출 (Tab 1)**")
+        cur_e_idx = model_options.index(extract_llm.model) if extract_llm.model in model_options else 0
+        cfg_ext_m = st.selectbox("색인 모델", options=model_options, index=cur_e_idx, key="cfg_ext_m", help="대량 파일 인제스천에 최적화된 경량 모델 추천")
+        cfg_ext_e = st.select_slider("색인 추론 강도", options=effort_options, value=extract_llm.thinking_level, format_func=lambda x: effort_labels.get(x, x), key="cfg_ext_e")
+
+        st.markdown("---")
+        st.markdown("**✍️ 2. 초안 기획 & 본문 합성 (Tab 2)**")
+        cur_s_idx = model_options.index(synth_llm.model) if synth_llm.model in model_options else 1
+        cfg_syn_m = st.selectbox("초안 모델", options=model_options, index=cur_s_idx, key="cfg_syn_m", help="논리 전개 및 문맥 합성력이 뛰어난 Flash/Pro 모델 추천")
+        cfg_syn_e = st.select_slider("초안 추론 강도", options=effort_options, value=synth_llm.thinking_level, format_func=lambda x: effort_labels.get(x, x), key="cfg_syn_e")
+
+        st.markdown("---")
+        st.markdown("**🔍 3. 검토 & 에디토리얼 퇴고 (Tab 3)**")
+        cur_p_idx = model_options.index(proof_llm.model) if proof_llm.model in model_options else 2
+        cfg_prf_m = st.selectbox("퇴고 모델", options=model_options, index=cur_p_idx, key="cfg_prf_m", help="출판급 문체 다듬기와 정밀 진단이 가능한 Pro/High 모델 추천")
+        cfg_prf_e = st.select_slider("퇴고 추론 강도", options=effort_options, value=proof_llm.thinking_level, format_func=lambda x: effort_labels.get(x, x), key="cfg_prf_e")
+
+        if st.button("💾 작업별 모델 설정 저장 & 적용", use_container_width=True, type="primary"):
+            _save_task_models(cfg_ext_m, cfg_ext_e, cfg_syn_m, cfg_syn_e, cfg_prf_m, cfg_prf_e)
+            st.success("🎉 작업별 맞춤 모델 설정이 저장 및 적용되었습니다!")
             st.rerun()
-        if st.button("💎 [출판 퀄리티 페어]\n3.8 Pro + High Effort", use_container_width=True):
-            llm.model = "gemini-3.8-pro"
-            llm.set_thinking_level("high")
-            for svc in [proofreader, synthesizer, extractor, style_learner]:
-                svc.llm_client.model = "gemini-3.8-pro"
-                svc.llm_client.set_thinking_level("high")
+
+    # Recommended 1-Click Preset Pairs
+    with st.expander("🎯 추천 프리셋 페어 (1-Click)", expanded=False):
+        if st.button("🚀 [추천 황금 조합]\n색인: Lite / 초안: Flash / 검토: Pro", use_container_width=True):
+            _save_task_models("gemini-3.5-flash-lite", "low", "gemini-3.8-flash", "medium", "gemini-3.8-pro", "high")
+            st.success("황금 조합 적용 완료!")
             st.rerun()
-        if st.button("⚡ [대량 색인 쾌속 페어]\n3.5 Flash-Lite + Low Effort", use_container_width=True):
-            llm.model = "gemini-3.5-flash-lite"
-            llm.set_thinking_level("low")
-            for svc in [proofreader, synthesizer, extractor, style_learner]:
-                svc.llm_client.model = "gemini-3.5-flash-lite"
-                svc.llm_client.set_thinking_level("low")
+        if st.button("⚡ [초고속 절약 페어]\n전 작업 3.5 Flash-Lite 통일", use_container_width=True):
+            _save_task_models("gemini-3.5-flash-lite", "low", "gemini-3.5-flash-lite", "low", "gemini-3.5-flash-lite", "low")
+            st.success("초고속 절약 페어 적용 완료!")
+            st.rerun()
+        if st.button("💎 [최고급 출판 페어]\n전 작업 3.8 Pro 통일", use_container_width=True):
+            _save_task_models("gemini-3.8-pro", "high", "gemini-3.8-pro", "high", "gemini-3.8-pro", "high")
+            st.success("최고급 출판 페어 적용 완료!")
             st.rerun()
 
     with st.expander("🔑 Gemini / OpenAI API 키 설정", expanded=not (has_gemini or has_openai)):
@@ -278,11 +311,13 @@ with st.sidebar:
                 new_lines.append(f"DEFAULT_LLM_PROVIDER={provider}")
                 env_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
 
-                llm.set_api_key(api_input, provider=provider)
-                proofreader.llm_client.set_api_key(api_input, provider=provider)
-                synthesizer.llm_client.set_api_key(api_input, provider=provider)
+                extract_llm.set_api_key(api_input, provider=provider)
+                synth_llm.set_api_key(api_input, provider=provider)
+                proof_llm.set_api_key(api_input, provider=provider)
                 extractor.llm_client.set_api_key(api_input, provider=provider)
+                synthesizer.llm_client.set_api_key(api_input, provider=provider)
                 style_learner.llm_client.set_api_key(api_input, provider=provider)
+                proofreader.llm_client.set_api_key(api_input, provider=provider)
                 st.success(f"🎉 {provider.upper()} API 키가 저장 및 활성화되었습니다!")
                 st.rerun()
 
@@ -296,8 +331,10 @@ with st.sidebar:
     else:
         st.caption(f"💡 앞으로 {5 - len(fin_list)}편 더 확정 시 나만의 문체 스타일이 AI에 완전 동기화됩니다.")
 
-    if getattr(llm, "last_fallback_info", None):
-        st.info(f"⚡ {llm.last_fallback_info}")
+    # Fallback alerts per service
+    for stage_lbl, cl in [("색인", extract_llm), ("초안", synth_llm), ("퇴고", proof_llm)]:
+        if getattr(cl, "last_fallback_info", None):
+            st.info(f"⚡ [{stage_lbl}] {cl.last_fallback_info}")
 
     if studio_password:
         st.divider()
@@ -319,7 +356,11 @@ tabs = st.tabs([
 # TAB 1: 작업 모니터 (Job Monitor & Corpus Browser)
 # -------------------------------------------------------------
 with tabs[0]:
-    st.header("1. 파이프라인 실시간 모니터링 & Seed 코퍼스")
+    t1_c1, t1_c2 = st.columns([3, 1])
+    with t1_c1:
+        st.header("1. 파이프라인 실시간 모니터링 & Seed 코퍼스")
+    with t1_c2:
+        st.info(f"📑 색인 AI: `{extract_llm.model}` ({extract_llm.thinking_level.upper()})")
 
     # Inbound Direct Uploader (P0-2)
     with st.expander("📥 신규 문서 브라우저 직접 업로드 (Web Drag & Drop Ingestion)", expanded=True):
@@ -453,7 +494,11 @@ with tabs[0]:
 # TAB 2: 초안 생성 (Draft Generator)
 # -------------------------------------------------------------
 with tabs[1]:
-    st.header("2. 상호보완 Seed 선별 및 중립 초안 생성")
+    t2_c1, t2_c2 = st.columns([3, 1])
+    with t2_c1:
+        st.header("2. 상호보완 Seed 선별 및 중립 초안 생성")
+    with t2_c2:
+        st.info(f"✍️ 초안 AI: `{synth_llm.model}` ({synth_llm.thinking_level.upper()})")
 
     # Step indicators
     current_step = st.session_state.get("t2_step", 1)
@@ -730,7 +775,11 @@ with tabs[1]:
 # TAB 3: Seed 이미지 뷰어 & 마크다운 에디터 (Studio View)
 # -------------------------------------------------------------
 with tabs[2]:
-    st.header("3. Seed 원본 이미지 뷰어 & 마크다운 퇴고 스튜디오")
+    t3_c1, t3_c2 = st.columns([3, 1])
+    with t3_c1:
+        st.header("3. Seed 원본 이미지 뷰어 & 마크다운 퇴고 스튜디오")
+    with t3_c2:
+        st.info(f"🔍 퇴고 AI: `{proof_llm.model}` ({proof_llm.thinking_level.upper()})")
 
     all_creations = repo.list_creations(limit=30)
     creation_options = {}
