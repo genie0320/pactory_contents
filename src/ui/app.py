@@ -160,6 +160,12 @@ if "t2_topic" not in st.session_state:
     st.session_state["t2_topic"] = ""
 if "t2_direction" not in st.session_state:
     st.session_state["t2_direction"] = ""
+else:
+    # Cleanup guard: If t2_direction contains markdown headers (# or ##) or frontmatter (---) or > 1500 chars,
+    # it means an old draft was accidentally pasted/polluted in a previous session. Reset it.
+    cur_raw = (st.session_state["t2_direction"] or "").strip()
+    if cur_raw.startswith("#") or cur_raw.startswith("---") or "\n## " in cur_raw or len(cur_raw) > 1500:
+        st.session_state["t2_direction"] = ""
 if "t2_seeds" not in st.session_state or st.session_state["t2_seeds"] is None:
     st.session_state["t2_seeds"] = []
 if "t2_blueprint" not in st.session_state:
@@ -562,11 +568,22 @@ with tabs[1]:
             placeholder="예: 생성형 AI 시대, 비즈니스 기획자가 갖춰야 할 진짜 경쟁력",
             key=f"t2_input_topic_{cur_reset_id}",
         )
+        
+        col_dh1, col_dh2 = st.columns([4, 1])
+        with col_dh1:
+            st.write("**집필 방향 및 나만의 고유한 관점/경험담 (Direction)**")
+        with col_dh2:
+            if st.button("🗑️ 관점 비우기", key="step1_clear_dir_btn", help="방향성 입력란만 비웁니다."):
+                st.session_state["t2_direction"] = ""
+                st.session_state["t2_reset_id"] = cur_reset_id + 1
+                st.rerun()
+
         d_val = st.text_area(
-            "집필 방향 및 나만의 고유한 관점/경험담 (Direction)",
+            "집필 방향 및 나만의 고유한 관점/경험담",
             value=st.session_state.get("t2_direction", ""),
-            placeholder="자신만의 주장, 현장 경험, 차별화된 문제의식 등을 자유롭게 서술하세요.",
-            height=200,
+            placeholder="자신만의 주장, 현장 경험, 차별화된 문제의식 등을 자유롭게 서술하세요. (생략 시 AI 기본 추천 적용)",
+            height=180,
+            label_visibility="collapsed",
             key=f"t2_input_direction_{cur_reset_id}",
         )
         st.caption(f"📝 입력 상태: 타깃 주제 **{len(t_val):,}자** | 집필 방향/관점 **{len(d_val):,}자**")
@@ -621,34 +638,43 @@ with tabs[1]:
         cur_t = st.session_state.get("t2_topic", "")
         cur_d = st.session_state.get("t2_direction", "")
 
-        # Target Topic & Context Confirmation Banner (2 distinct cards for clarity)
-        col_banner1, col_banner2 = st.columns([1, 1])
-        with col_banner1:
+        # 1단계에서 가져온 주제와 방향성 (2단계에서 직접 확인 및 즉시 수정/비우기 가능)
+        with st.container():
             st.markdown(
-                f"""
-                <div style="background-color: rgba(30, 136, 229, 0.08); border-left: 4px solid #1E88E5; padding: 12px 16px; border-radius: 6px; height: 100%;">
-                    <div style="font-size: 12px; font-weight: 700; color: #1565C0; margin-bottom: 4px;">🎯 1단계 타깃 주제 (Topic) <span style="font-size: 11px; font-weight: 400; color: #666;">({len(cur_t):,}자)</span></div>
-                    <div style="font-size: 15px; font-weight: 700; color: #111; line-height: 1.4;">{cur_t or '(주제 미지정)'}</div>
+                """
+                <div style="background-color: rgba(30, 136, 229, 0.06); border-left: 4px solid #1E88E5; padding: 10px 14px; border-radius: 6px; margin-bottom: 10px;">
+                    <div style="font-size: 13px; font-weight: 700; color: #1565C0;">
+                        📋 1단계에서 가져온 타깃 주제 & 집필 방향 (여기서 바로 확인하고 필요시 수정/비울 수 있습니다)
+                    </div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-        with col_banner2:
-            st.markdown(
-                f"""
-                <div style="background-color: rgba(67, 160, 71, 0.08); border-left: 4px solid #43A047; padding: 12px 16px; border-radius: 6px; height: 100%;">
-                    <div style="font-size: 12px; font-weight: 700; color: #2E7D32; margin-bottom: 4px;">🧭 나만의 집필 방향 및 고유 관점 (Context) <span style="font-size: 11px; font-weight: 400; color: #666;">({len(cur_d):,}자)</span></div>
-                    <div style="font-size: 13px; color: #222; line-height: 1.5; max-height: 120px; overflow-y: auto; white-space: pre-wrap;">{cur_d or '(관점 미지정 - 기본 아키타입 적용)'}</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        
-        b_c1, b_c2 = st.columns([7, 3])
-        with b_c2:
-            if st.button("🗑️ 관점 비우고 1단계로 새로 쓰기", help="현재 관점/방향성 내용을 비우고 1단계로 돌아갑니다.", use_container_width=True):
-                reset_generator_state()
-                st.rerun()
+            col_b1, col_b2 = st.columns([1, 1])
+            with col_b1:
+                new_t = st.text_input("🎯 타깃 주제 (Topic)", value=cur_t, key="t2_step2_topic_edit")
+                if new_t != cur_t:
+                    st.session_state["t2_topic"] = new_t
+                    cur_t = new_t
+            with col_b2:
+                col_d_hd1, col_d_hd2 = st.columns([3, 1])
+                with col_d_hd1:
+                    st.caption(f"🧭 나만의 집필 방향 및 고유 관점 (Context) ({len(cur_d):,}자)")
+                with col_d_hd2:
+                    if st.button("🗑️ 관점 비우기", key="t2_step2_clear_dir", help="관점 내용을 즉시 비웁니다."):
+                        st.session_state["t2_direction"] = ""
+                        st.rerun()
+                new_d = st.text_area(
+                    "방향성/관점",
+                    value=cur_d,
+                    height=95,
+                    placeholder="(관점 미지정 - AI 기본 아키타입으로 자동 추천)",
+                    label_visibility="collapsed",
+                    key="t2_step2_direction_edit",
+                )
+                if new_d != cur_d:
+                    st.session_state["t2_direction"] = new_d
+                    cur_d = new_d
         st.write("")
 
         c_seeds = st.session_state.get("t2_seeds") or []
