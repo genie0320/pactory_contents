@@ -1,34 +1,39 @@
 import { useState, useEffect } from 'react';
-import { Sparkles, Brain, CheckCircle2 } from 'lucide-react';
-import { styleApi } from '../api/client';
+import { Sparkles, Brain, CheckCircle2, BookOpen } from 'lucide-react';
+import { styleApi, editorApi } from '../api/client';
 import type { StyleProfileResponse } from '../api/client';
 
 export const StylePersonaPage = () => {
   const [profile, setProfile] = useState<StyleProfileResponse | null>(null);
   const [isLearning, setIsLearning] = useState(false);
   const [learnMessage, setLearnMessage] = useState('');
+  const [finalizedCount, setFinalizedCount] = useState(0);
 
-  const loadProfile = async () => {
+  const loadData = async () => {
     try {
-      const res = await styleApi.getStyle();
+      const [res, creations] = await Promise.all([
+        styleApi.getStyle(),
+        editorApi.listCreations('FINALIZED'),
+      ]);
       setProfile(res);
+      setFinalizedCount(creations.length);
     } catch (err) {
       console.error(err);
     }
   };
 
   useEffect(() => {
-    loadProfile();
+    loadData();
   }, []);
 
   const handleLearnStyle = async () => {
     setIsLearning(true);
     setLearnMessage('');
     try {
-      const res = await styleApi.learnStyle(3);
+      const res = await styleApi.learnStyle(Math.min(3, Math.max(1, finalizedCount)));
       setLearnMessage(res.message);
       if (res.success) {
-        await loadProfile();
+        await loadData();
       }
     } catch (err: any) {
       alert(err.response?.data?.detail || '스타일 학습 중 오류가 발생했습니다.');
@@ -63,18 +68,24 @@ export const StylePersonaPage = () => {
       <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
           <div>
-            <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">Active Persona</span>
+            <div className="flex items-center space-x-2">
+              <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">Active Persona</span>
+              <span className="text-xs font-semibold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md flex items-center space-x-1">
+                <BookOpen className="w-3 h-3 text-slate-500" />
+                <span>퇴고 완료작 {finalizedCount}편 보유</span>
+              </span>
+            </div>
             <h1 className="text-xl font-extrabold text-slate-900 mt-0.5">
               {profile?.persona_name || 'Chief Business Essayist'}
             </h1>
           </div>
           <button
             onClick={handleLearnStyle}
-            disabled={isLearning}
+            disabled={isLearning || finalizedCount === 0}
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition-all shadow-xs flex items-center space-x-1.5"
           >
             <Sparkles className="w-4 h-4" />
-            <span>{isLearning ? '퇴고작 분석 및 문체 학습 중...' : '🧬 퇴고작 기반 문체 학습'}</span>
+            <span>{isLearning ? '퇴고작 분석 및 문체 학습 중...' : `🧬 퇴고작 기반 문체 학습 (${finalizedCount}편)`}</span>
           </button>
         </div>
 

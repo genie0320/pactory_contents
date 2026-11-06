@@ -25,6 +25,30 @@ from src.synthesis.distiller import MaterialDistiller
 from src.synthesis.planner import SynthesisPlanner
 
 
+class CleanYamlDumper(yaml.SafeDumper):
+    pass
+
+
+def _yaml_str_representer(dumper, data):
+    if "\n" in data:
+        return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|")
+    return dumper.represent_scalar("tag:yaml.org,2002:str", data)
+
+
+CleanYamlDumper.add_representer(str, _yaml_str_representer)
+
+
+def dump_clean_yaml(data: dict) -> str:
+    """Dump YAML without 80-char line-wrapping or backslash escape sequences."""
+    return yaml.dump(
+        data,
+        Dumper=CleanYamlDumper,
+        allow_unicode=True,
+        sort_keys=False,
+        width=10000,
+    )
+
+
 class ArticleSynthesizer:
     """Orchestrates Blueprint planning, material distillation, and neutral draft synthesis."""
 
@@ -139,7 +163,7 @@ class ArticleSynthesizer:
             if len(parts) >= 3:
                 final_body = parts[2].strip()
 
-        yaml_str = yaml.dump(frontmatter_data, allow_unicode=True, sort_keys=False)
+        yaml_str = dump_clean_yaml(frontmatter_data)
         final_markdown = f"---\n{yaml_str}---\n\n{final_body}\n"
 
         # 5. Output file
@@ -252,7 +276,7 @@ class ArticleSynthesizer:
             if len(parts) >= 3:
                 final_body = parts[2].strip()
 
-        yaml_str = yaml.dump(frontmatter_data, allow_unicode=True, sort_keys=False)
+        yaml_str = dump_clean_yaml(frontmatter_data)
         final_markdown = f"---\n{yaml_str}---\n\n{final_body}\n"
 
         # 5. Output file

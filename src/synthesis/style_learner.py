@@ -48,7 +48,7 @@ class StyleLearner:
     def get_finalized_candidates(self, min_count: int = 5, force: bool = False) -> List[Dict[str, Any]]:
         """Fetch finalized creation records ready for style learning."""
         threshold = 1 if force else min_count
-        return self.repo.get_finalized_creations_for_learning(min_count=threshold)
+        return self.repo.get_finalized_creations_for_learning(min_count=threshold, include_already_used=True)
 
     def count_finalized_creations(self) -> int:
         """Count total finalized creations currently in DB."""

@@ -623,12 +623,18 @@ class StorageRepository:
                 results.append(item)
             return results
 
-    def get_finalized_creations_for_learning(self, min_count: int = 5) -> List[Dict[str, Any]]:
+    def get_finalized_creations_for_learning(
+        self,
+        min_count: int = 3,
+        include_already_used: bool = True,
+    ) -> List[Dict[str, Any]]:
         """
-        Fetch finalized creations with user_final_text that have not been learned yet.
-        Returns list of creations if count >= min_count, otherwise empty list.
+        Fetch finalized creations with user_final_text for style learning.
+        If unlearned creations are fewer than min_count, also includes previously learned
+        finalized creations so the user can always train/refresh their persona when they have enough finalized articles.
         """
         with get_db(self.db_path) as conn:
+            # 1. First, check strictly unlearned items
             cursor = conn.execute(
                 """
                 SELECT * FROM drafts_and_creations
@@ -647,7 +653,28 @@ class StorageRepository:
 
             if len(items) >= min_count:
                 return items
-            return []
+
+            # 2. If unlearned items are below min_count, gather ALL finalized creations with final text
+            if include_already_used:
+                cursor_all = conn.execute(
+                    """
+                    SELECT * FROM drafts_and_creations
+                    WHERE status = 'FINALIZED'
+                      AND user_final_text IS NOT NULL
+                      AND LENGTH(TRIM(user_final_text)) > 0
+                    ORDER BY finalized_at DESC
+                    """
+                )
+                all_items = []
+                for r in cursor_all.fetchall():
+                    d = dict(r)
+                    d["seed_doc_ids"] = json.loads(d["seed_doc_ids_json"]) if d.get("seed_doc_ids_json") else []
+                    all_items.append(d)
+
+                if len(all_items) >= min_count:
+                    return all_items[:10]
+
+            return items if len(items) >= min_count else []
 
     def mark_creations_used_for_style(self, creation_ids: List[str]) -> None:
         """Mark creation records as used_for_style_learning = 1."""

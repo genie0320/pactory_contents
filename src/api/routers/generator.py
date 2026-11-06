@@ -138,13 +138,17 @@ async def generate_blueprint(req: BlueprintGenerateRequest):
         raise HTTPException(status_code=500, detail=f"Blueprint planning failed: {e}")
 
     raw_dict = blueprint.model_dump()
+    sections = [
+        s.model_dump() if hasattr(s, "model_dump") else s
+        for s in blueprint.outline_sections
+    ]
     return BlueprintGenerateResponse(
         working_title=blueprint.working_title,
         core_thesis=blueprint.core_thesis,
         target_audience=blueprint.target_audience,
         hook_strategy=blueprint.hook_strategy,
         key_framework=blueprint.key_framework,
-        outline_sections=[s.model_dump() for s in blueprint.outline_sections],
+        outline_sections=sections,
         selected_seed_ids=[s.doc_id for s in seeds],
         raw_blueprint=raw_dict,
     )

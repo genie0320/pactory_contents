@@ -230,6 +230,21 @@ class SeedRetriever:
         except Exception as e:
             return candidates[:top_k]
 
+    def retrieve_seeds(
+        self,
+        topic: str,
+        user_direction: str = "",
+        target_archetype: Optional[ArticleArchetype] = None,
+        count: int = 3,
+    ) -> List[SeedRoleAssignment]:
+        """Convenience alias for select_complementary_seeds."""
+        return self.select_complementary_seeds(
+            topic=topic,
+            direction=user_direction,
+            target_archetype=target_archetype,
+            count=count,
+        )
+
     def select_complementary_seeds(
         self,
         topic: str,

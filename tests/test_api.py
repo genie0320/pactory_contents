@@ -80,6 +80,112 @@ def test_seed_search_endpoint():
     assert "candidates" in data
 
 
+@patch("src.storage.retriever.SeedRetriever.retrieve_seeds")
+@patch("src.synthesis.planner.SynthesisPlanner.plan_blueprint")
+def test_blueprint_generation_endpoint(mock_plan, mock_retrieve):
+    """Verify blueprint generation returns properly formatted sections."""
+    from src.models import (
+        ArticleArchetype,
+        ArticleMetadata,
+        SeedRoleAssignment,
+        SynthesisBlueprint,
+    )
+    mock_retrieve.return_value = [
+        SeedRoleAssignment(
+            seed_type="domain_case",
+            doc_id="doc1",
+            title="테스트 문서",
+            reason="테스트",
+            metadata=ArticleMetadata(
+                target_audience="독자",
+                core_problem="문제",
+                reframing_logic="논리",
+                core_thesis="테제",
+                article_archetype=ArticleArchetype.STEP_BY_STEP_TUTORIAL,
+                hook_strategy="후크",
+                solution_framework=["해결1", "해결2"],
+                notable_episodes=["에피소드1"],
+                reusable_asset_types=[],
+                primary_category="카테고리",
+                topic_tags=["태그1", "태그2", "태그3"],
+            ),
+        )
+    ]
+    mock_plan.return_value = SynthesisBlueprint(
+        proposed_title="테스트 기획안",
+        target_reader_definition="기획자",
+        synthesized_reframing="새로운 관점",
+        role_assignments=["요소1"],
+        section_outline=["1. 서론", "2. 본론"],
+    )
+    resp = client.post(
+        "/api/draft/blueprint",
+        json={"topic": "테스트", "direction": "방향", "selected_seed_ids": []},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["working_title"] == "테스트 기획안"
+    assert len(data["outline_sections"]) == 2
+
+
+@patch("src.storage.retriever.SeedRetriever.retrieve_seeds")
+@patch("src.synthesis.synthesizer.ArticleSynthesizer.synthesize")
+def test_synthesize_endpoint(mock_synth, mock_retrieve):
+    """Verify draft synthesis endpoint returns full draft and creation id."""
+    from pathlib import Path
+    from src.models import (
+        ArticleArchetype,
+        ArticleMetadata,
+        SeedRoleAssignment,
+        SynthesisBlueprint,
+    )
+    mock_retrieve.return_value = [
+        SeedRoleAssignment(
+            seed_type="domain_case",
+            doc_id="doc1",
+            title="테스트 문서",
+            reason="테스트",
+            metadata=ArticleMetadata(
+                target_audience="독자",
+                core_problem="문제",
+                reframing_logic="논리",
+                core_thesis="테제",
+                article_archetype=ArticleArchetype.STEP_BY_STEP_TUTORIAL,
+                hook_strategy="후크",
+                solution_framework=["해결1", "해결2"],
+                notable_episodes=["에피소드1"],
+                reusable_asset_types=[],
+                primary_category="카테고리",
+                topic_tags=["태그1", "태그2", "태그3"],
+            ),
+        )
+    ]
+    bp = SynthesisBlueprint(
+        proposed_title="테스트 초안 제목",
+        target_reader_definition="독자",
+        synthesized_reframing="관점",
+        role_assignments=[],
+        section_outline=[],
+    )
+    mock_synth.return_value = (
+        Path("test.md"),
+        "# 테스트 초안 제목\n\n본문 내용입니다.",
+        bp,
+        [],
+    )
+    resp = client.post(
+        "/api/draft/synthesize",
+        json={"topic": "테스트", "direction": "방향", "selected_seed_ids": []},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["title"] == "테스트 초안 제목"
+    assert "creation_id" in data
+
+
+
 def test_creations_crud_lifecycle():
     """Verify full CRUD lifecycle for draft creations."""
     # 1. Create
