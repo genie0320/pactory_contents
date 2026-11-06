@@ -115,8 +115,12 @@ class StorageRepository:
                 return None
             return self._row_to_article(row)
 
-    def list_articles(self, status: Optional[Union[str, ArticleStatus]] = None) -> List[ArticleRecord]:
-        """List articles, optionally filtered by status."""
+    def list_articles(
+        self,
+        status: Optional[Union[str, ArticleStatus]] = None,
+        limit: Optional[int] = None,
+    ) -> List[ArticleRecord]:
+        """List articles, optionally filtered by status and limited."""
         query = "SELECT * FROM articles"
         params: List[Any] = []
         if status:
@@ -124,6 +128,9 @@ class StorageRepository:
             query += " WHERE status = ?"
             params.append(val)
         query += " ORDER BY ingested_at DESC"
+        if limit:
+            query += " LIMIT ?"
+            params.append(limit)
 
         with get_db(self.db_path) as conn:
             cursor = conn.execute(query, params)
