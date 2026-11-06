@@ -107,6 +107,29 @@ CREATE TABLE IF NOT EXISTS drafts_and_creations (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     finalized_at TIMESTAMP
 );
+
+-- 7. [v2.1 신규] 시맨틱 벡터 임베딩 저장 테이블
+CREATE TABLE IF NOT EXISTS article_embeddings (
+    doc_id TEXT PRIMARY KEY,
+    embedding_json TEXT NOT NULL,
+    model TEXT NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (doc_id) REFERENCES articles(doc_id) ON DELETE CASCADE
+);
+
+-- 8. [v2.1 신규] LLM 비용, 토큰, 지연시간 모니터링 테이블
+CREATE TABLE IF NOT EXISTS llm_usage_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_type TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    prompt_tokens INTEGER DEFAULT 0,
+    completion_tokens INTEGER DEFAULT 0,
+    total_tokens INTEGER DEFAULT 0,
+    latency_ms REAL DEFAULT 0.0,
+    estimated_cost_usd REAL DEFAULT 0.0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 

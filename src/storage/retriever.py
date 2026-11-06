@@ -1,10 +1,12 @@
 """Cross-seed retrieval and role-based complementary ranking engine."""
 
+import math
 import re
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 import sqlite3
 
 from src.config import AppConfig, load_config
+from src.extraction.llm_client import LLMClient
 from src.models import (
     ArticleArchetype,
     ArticleMetadata,
@@ -45,15 +47,33 @@ DOMAIN_SYNONYMS: Dict[str, List[str]] = {
 
 
 class SeedRetriever:
-    """Retrieves and ranks complementary Seed articles based on FTS5 BM25 and role diversity."""
+    """Retrieves and ranks complementary Seed articles based on Hybrid FTS5 BM25 + Dense Vectors."""
 
-    def __init__(self, config: Optional[AppConfig] = None, repo: Optional[StorageRepository] = None):
+    def __init__(
+        self,
+        config: Optional[AppConfig] = None,
+        repo: Optional[StorageRepository] = None,
+        llm_client: Optional[LLMClient] = None,
+    ):
         self.config = config or load_config()
         self.repo = repo or StorageRepository(
             db_path=self.config.paths.db_path,
             processed_dir=self.config.paths.processed_dir,
         )
         self.db_path = self.config.paths.db_path
+        self.llm_client = llm_client or LLMClient(repo=self.repo)
+
+    @staticmethod
+    def cosine_similarity(v1: List[float], v2: List[float]) -> float:
+        """Compute cosine similarity between two dense vectors."""
+        if not v1 or not v2 or len(v1) != len(v2):
+            return 0.0
+        dot = sum(a * b for a, b in zip(v1, v2))
+        norm1 = math.sqrt(sum(a * a for a in v1))
+        norm2 = math.sqrt(sum(b * b for b in v2))
+        if norm1 <= 0.0 or norm2 <= 0.0:
+            return 0.0
+        return dot / (norm1 * norm2)
 
     @staticmethod
     def extract_keywords(text: str) -> List[str]:
@@ -97,10 +117,12 @@ class SeedRetriever:
         topic: str,
         direction: str = "",
         top_k: int = 15,
+        alpha: float = 0.5,
     ) -> List[Tuple[ArticleRecord, ArticleMetadata, float]]:
         """
-        Stage 1: FTS5 BM25 retrieval with multi-column weighting + LIKE fallback.
-        Topic keywords are amplified 3x to ensure core intent dictates ranking.
+        Hybrid retrieval combining FTS5 BM25 (keyword matching) and Dense Vector Embedding (semantic similarity).
+        Final score:
+            score = (alpha * normalized_bm25) + ((1.0 - alpha) * vector_similarity)
         """
         topic_keywords = self.extract_keywords(topic)
         direction_keywords = self.extract_keywords(direction) if direction else []
@@ -109,19 +131,13 @@ class SeedRetriever:
         if not all_keywords:
             all_keywords = [topic.strip()]
 
-        # Construct FTS5 match query: 'keyword1 OR keyword2 ...'
         fts_query = " OR ".join(f'"{kw}"' for kw in all_keywords if kw)
-
         conn = get_connection(self.db_path)
         candidates: List[Tuple[ArticleRecord, ArticleMetadata, float]] = []
         seen_doc_ids: Set[str] = set()
 
         try:
             cursor = conn.cursor()
-            # FTS5 columns: doc_id(UNINDEXED), title(2.0), primary_category(1.0),
-            # target_audience(1.5), core_problem(2.5), reframing_logic(3.0),
-            # core_thesis(2.0), solution_framework(2.0), notable_episodes(1.5),
-            # topic_tags(2.5), asset_captions(1.0)
             if fts_query:
                 sql = """
                 SELECT doc_id, bm25(metadata_fts, 2.0, 1.0, 1.5, 2.5, 3.0, 2.0, 2.0, 1.5, 2.5, 1.0) as rank
@@ -188,7 +204,31 @@ class SeedRetriever:
         finally:
             conn.close()
 
-        return candidates[:top_k]
+        # Dense Vector Re-ranking & Hybrid Fusion
+        try:
+            query_text = f"{topic} {direction}".strip()
+            query_vec = self.llm_client.get_embedding_sync(query_text)
+            stored_embeddings = self.repo.get_all_embeddings()
+
+            hybrid_candidates = []
+            for art, meta, raw_rank in candidates:
+                norm_bm25 = 1.0 / (1.0 + abs(raw_rank)) if raw_rank != 0.0 else 0.1
+                art_vec = stored_embeddings.get(art.doc_id)
+                if not art_vec:
+                    doc_repr = f"{art.title}. {meta.core_thesis}. {' '.join(meta.topic_tags)}"
+                    art_vec = self.llm_client.get_embedding_sync(doc_repr)
+                    self.repo.upsert_article_embedding(art.doc_id, art_vec)
+                    stored_embeddings[art.doc_id] = art_vec
+
+                sim = self.cosine_similarity(query_vec, art_vec)
+                norm_sim = max(0.0, sim)
+                final_score = (alpha * norm_bm25) + ((1.0 - alpha) * norm_sim)
+                hybrid_candidates.append((art, meta, round(final_score, 4)))
+
+            hybrid_candidates.sort(key=lambda x: x[2], reverse=True)
+            return hybrid_candidates[:top_k]
+        except Exception as e:
+            return candidates[:top_k]
 
     def select_complementary_seeds(
         self,

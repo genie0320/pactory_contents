@@ -659,3 +659,105 @@ class StorageRepository:
                 f"UPDATE drafts_and_creations SET used_for_style_learning = 1 WHERE creation_id IN ({placeholders})",
                 creation_ids,
             )
+
+    # -------------------------------------------------------------
+    # 7. Dense Vector Embeddings (article_embeddings table)
+    # -------------------------------------------------------------
+    def upsert_article_embedding(self, doc_id: str, embedding: List[float], model: str = "text-embedding-004") -> None:
+        """Store or update dense vector embedding for an article."""
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with get_db(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO article_embeddings (doc_id, embedding_json, model, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(doc_id) DO UPDATE SET
+                    embedding_json = excluded.embedding_json,
+                    model = excluded.model,
+                    updated_at = excluded.updated_at
+                """,
+                (doc_id, json.dumps(embedding), model, now_iso),
+            )
+
+    def get_article_embedding(self, doc_id: str) -> Optional[List[float]]:
+        """Retrieve embedding vector for a single article."""
+        with get_db(self.db_path) as conn:
+            cursor = conn.execute("SELECT embedding_json FROM article_embeddings WHERE doc_id = ?", (doc_id,))
+            row = cursor.fetchone()
+            if row and row["embedding_json"]:
+                return json.loads(row["embedding_json"])
+        return None
+
+    def get_all_embeddings(self) -> Dict[str, List[float]]:
+        """Retrieve all stored embedding vectors as a map of doc_id -> vector."""
+        res: Dict[str, List[float]] = {}
+        with get_db(self.db_path) as conn:
+            cursor = conn.execute("SELECT doc_id, embedding_json FROM article_embeddings")
+            for row in cursor.fetchall():
+                try:
+                    res[row["doc_id"]] = json.loads(row["embedding_json"])
+                except Exception:
+                    continue
+        return res
+
+    # -------------------------------------------------------------
+    # 8. Observability & LLM Usage Logging (llm_usage_logs table)
+    # -------------------------------------------------------------
+    def log_llm_usage(
+        self,
+        task_type: str,
+        provider: str,
+        model: str,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
+        latency_ms: float = 0.0,
+        estimated_cost_usd: float = 0.0,
+    ) -> None:
+        """Log token count, latency, and cost for an LLM invocation."""
+        now_iso = datetime.now(timezone.utc).isoformat()
+        total_tokens = prompt_tokens + completion_tokens
+        with get_db(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO llm_usage_logs (
+                    task_type, provider, model, prompt_tokens,
+                    completion_tokens, total_tokens, latency_ms,
+                    estimated_cost_usd, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (task_type, provider, model, prompt_tokens, completion_tokens, total_tokens, latency_ms, estimated_cost_usd, now_iso),
+            )
+
+    def get_observability_stats(self) -> Dict[str, Any]:
+        """Aggregate total tokens, invocations, average latency, and estimated cost."""
+        with get_db(self.db_path) as conn:
+            cursor = conn.execute(
+                """
+                SELECT
+                    COUNT(*) as total_calls,
+                    COALESCE(SUM(total_tokens), 0) as total_tokens,
+                    COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
+                    COALESCE(SUM(completion_tokens), 0) as completion_tokens,
+                    COALESCE(AVG(latency_ms), 0.0) as avg_latency_ms,
+                    COALESCE(SUM(estimated_cost_usd), 0.0) as total_cost_usd
+                FROM llm_usage_logs
+                """
+            )
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "total_calls": row["total_calls"],
+                    "total_tokens": row["total_tokens"],
+                    "prompt_tokens": row["prompt_tokens"],
+                    "completion_tokens": row["completion_tokens"],
+                    "avg_latency_ms": round(float(row["avg_latency_ms"]), 1),
+                    "total_cost_usd": round(float(row["total_cost_usd"]), 5),
+                }
+            return {
+                "total_calls": 0,
+                "total_tokens": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "avg_latency_ms": 0.0,
+                "total_cost_usd": 0.0,
+            }

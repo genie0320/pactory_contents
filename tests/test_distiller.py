@@ -1,6 +1,7 @@
 """Tests for Material Distiller and De-contextualized Neutral Synthesis (Milestone 5)."""
 
 from pathlib import Path
+from unittest.mock import MagicMock
 import pytest
 
 from src.config import AppConfig, PathSettings
@@ -11,6 +12,7 @@ from src.models import (
     DistilledMaterialSheet,
     ReusableAssetType,
     SeedRoleAssignment,
+    SynthesisBlueprint,
 )
 from src.storage.db import init_db
 from src.storage.repository import StorageRepository
@@ -46,12 +48,62 @@ def distillation_env(tmp_path: Path):
     repo.save_processed_text("5455", "# 우린 왜 일을 미룰까요\n\n변연계와 전두엽의 갈등에 대한 긴 설명...")
     repo.save_processed_text("5457", "# 의지박약 탈출 2단계\n\n완벽주의를 버리고 60점 못난 초안을 쓰는 법...")
 
-    llm = LLMClient()
-    distiller = MaterialDistiller(repo=repo, llm_client=llm)
+    mock_llm = MagicMock(spec=LLMClient)
+
+    def mock_extract(system_prompt="", user_prompt="", schema=None, model=None):
+        if schema == DistilledMaterialSheet:
+            return DistilledMaterialSheet(
+                doc_id="5455",
+                assigned_role="domain_case",
+                core_mechanism_bullets=[
+                    "과업 착수 시 변연계(감정)와 전두엽(이성)의 충돌 발생",
+                    "마찰을 최소화해야 전두엽이 주도권을 회복함",
+                ],
+                extracted_facts_and_numbers=[
+                    "착수 마찰 10초 단축 시 실행 전환율 3배 증가",
+                    "마감 준수율 95% 달성",
+                ],
+                case_causal_chains=[
+                    "상황: 완벽한 결과물 요구 -> 반응: 착수 회피 -> 해결: 60점 못난 초안으로 즉시 개시"
+                ],
+                raw_templates_or_criteria=[],
+            )
+        elif schema == SynthesisBlueprint:
+            return SynthesisBlueprint(
+                proposed_title="완벽주의 직장인을 위한 60점 못난 초안 공식",
+                target_reader_definition="과업을 끝없이 미루는 완벽주의 직장인",
+                synthesized_reframing="완벽주의는 성실함이 아닌 두려움의 발로이며, 60점 초안이 돌파구다",
+                role_assignments=["5455에서 뇌과학적 원인 차용", "5457에서 못난 초안 실행법 차용"],
+                section_outline=[
+                    "1. 왜 우리는 중요한 일 앞에서 멈칫거리는가",
+                    "2. 뇌과학이 밝힌 미루기의 진짜 정체",
+                    "3. 60점 못난 초안으로 시작하는 3단계 규칙",
+                ],
+            )
+        return schema()
+
+    mock_llm.extract_structured_sync.side_effect = mock_extract
+
+    # Generated article text
+    mock_llm.generate_text_sync.return_value = (
+        "# 완벽주의 직장인을 위한 60점 못난 초안 공식\n\n"
+        "완벽주의에 사로잡힌 직장인들은 일을 시작하지 못하고 끝없이 미룹니다. "
+        "하지만 문제는 의지가 아니라 뇌의 마찰입니다.\n\n"
+        "## 1. 60점짜리 못난 초안의 마법\n"
+        "완벽주의를 버리고 60점 초안을 먼저 던져두면 마찰이 급격히 줄어듭니다. "
+        "초안을 작성하고 나면 수정과 퇴고는 훨씬 쉬워집니다.\n\n"
+        "## 2. 구체적인 3단계 실행 공식\n"
+        "1) 10분 타이머 설정\n2) 서두 쓰지 않고 본론 한 줄부터 쓰기\n3) 스스로에게 60점 합격점 부여하기\n\n"
+        "이렇게 완벽주의를 내려놓고 초안을 써 내려갈 때 비로소 진정한 몰입과 성장이 시작됩니다."
+    )
+
+    distiller = MaterialDistiller(repo=repo, llm_client=mock_llm)
+    planner = SynthesisPlanner(llm_client=mock_llm)
     synthesizer = ArticleSynthesizer(
         config=config,
         repo=repo,
-        llm_client=llm,
+        llm_client=mock_llm,
+        planner=planner,
         distiller=distiller,
     )
     return repo, distiller, synthesizer

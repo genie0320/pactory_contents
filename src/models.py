@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
@@ -120,6 +120,30 @@ class SynthesisBlueprint(BaseModel):
         default_factory=list,
         description="선별된 Seed의 이미지(asset_id) 중 어느 섹션에 어떤 형태로 재구성/삽입하면 좋을지 제안",
     )
+
+    @property
+    def working_title(self) -> str:
+        return self.proposed_title
+
+    @property
+    def target_audience(self) -> str:
+        return self.target_reader_definition
+
+    @property
+    def core_thesis(self) -> str:
+        return self.synthesized_reframing
+
+    @property
+    def hook_strategy(self) -> str:
+        return self.synthesized_reframing
+
+    @property
+    def key_framework(self) -> List[str]:
+        return self.role_assignments
+
+    @property
+    def outline_sections(self) -> List[Any]:
+        return [{"section_title": s, "section_goal": "", "key_points": []} for s in self.section_outline]
 
 
 class DistilledMaterialSheet(BaseModel):

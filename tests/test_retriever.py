@@ -166,3 +166,27 @@ def test_complementary_seed_selection(populated_retriever):
     # Check Seed #3 role: structure_asset (should pick checklist / tutorial 8204)
     assert seeds[2].seed_type == "structure_asset"
     assert seeds[2].doc_id == "8204"
+
+
+def test_cosine_similarity():
+    v1 = [1.0, 0.0, 0.0]
+    v2 = [1.0, 0.0, 0.0]
+    assert abs(SeedRetriever.cosine_similarity(v1, v2) - 1.0) < 1e-5
+
+    v3 = [0.0, 1.0, 0.0]
+    assert abs(SeedRetriever.cosine_similarity(v1, v3) - 0.0) < 1e-5
+
+    assert SeedRetriever.cosine_similarity([], []) == 0.0
+
+
+def test_hybrid_search_candidates(populated_retriever):
+    retriever = populated_retriever
+    candidates = retriever.search_candidates(
+        topic="AI 자동화",
+        direction="마찰 제거와 실전 루틴",
+        top_k=3,
+        alpha=0.5,
+    )
+    assert len(candidates) >= 1
+    for art, meta, score in candidates:
+        assert 0.0 <= score <= 1.0
