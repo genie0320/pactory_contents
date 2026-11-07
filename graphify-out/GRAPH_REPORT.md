@@ -1,29 +1,29 @@
 # Graph Report - pactory_contents  (2026-11-07)
 
 ## Corpus Check
-- 87 files · ~70,411 words
+- 89 files · ~70,733 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 14 file(s) not represented in the graph (top: (none) 5, .service 3, .css 2)
 
 ## Summary
-- 2017 nodes · 3159 edges · 405 communities (32 shown, 373 thin omitted)
-- Extraction: 92% EXTRACTED · 8% INFERRED · 0% AMBIGUOUS · INFERRED: 246 edges (avg confidence: 0.9)
+- 2046 nodes · 3145 edges · 399 communities (38 shown, 361 thin omitted)
+- Extraction: 94% EXTRACTED · 6% INFERRED · 0% AMBIGUOUS · INFERRED: 193 edges (avg confidence: 0.9)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `d344a2da`
+- Built from commit: `4472c1fa`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - LLMServiceError
 - routers/inbox.py
-- ArticleSynthesizer
+- ArticleMetadata
 - SeedRetriever
 - ArticleRecord
 - test_langfuse_observability.py
 - routers/generator.py
-- inspirator.py
+- IdeaPlanningOutput
 - paths
 - package.json
 - routers/settings.py
@@ -32,38 +32,33 @@
 - IngestionScanner
 - pactory-studio
 - compilerOptions
-- get_db
+- StorageRepository
 - App.tsx
 - useDraftStore.ts
-- models.py
+- synthesizer.py
 - ArticleMetadata
 - main.py
 - test_api.py
-- cmd_generate
+- auth.py
 - LLMClient
 - .oxlintrc.json
-- repo
+- extraction_env
 - scripts
 - routers/style.py
 - load_config
-- update_creation
 - cmd_extract
-- process_inbox
-- auth_status
 - run_retrieval_experiment.py
-- delete_creation
-- get_style_profile
+- routers/editor.py
 - run.py
+- ArticleRecord
 - tsconfig.json
-- StorageRepository
-- llm_service_error_handler
+- PactoryError
 - backup_daily.sh
 - run_pipeline.sh
 - seed-synthesis-engine
-- is_retryable_error
 - _run_inbox_pipeline_task
-- json
-- get_observability_metrics
+- llm_client.py
+- verify_auth
 - config.py
 - GeneratorPage.tsx
 - StyleLearner
@@ -399,61 +394,61 @@
 - 7178/manifest.json
 
 ## God Nodes (most connected - your core abstractions)
-1. `StorageRepository` - 111 edges
-2. `load_config()` - 66 edges
-3. `LLMClient` - 64 edges
-4. `get_db()` - 39 edges
-5. `ArticleArchetype` - 37 edges
+1. `StorageRepository` - 91 edges
+2. `LLMClient` - 64 edges
+3. `load_config()` - 40 edges
+4. `get_db()` - 38 edges
+5. `ArticleArchetype` - 35 edges
 6. `ArticleMetadata` - 35 edges
 7. `SeedRoleAssignment` - 35 edges
 8. `ArticleRecord` - 34 edges
-9. `SynthesisBlueprint` - 30 edges
-10. `AppConfig` - 30 edges
+9. `AppConfig` - 33 edges
+10. `SynthesisBlueprint` - 29 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `test_complementary_seed_selection()` --uses--> `ArticleArchetype`  [INFERRED]
   tests/test_retriever.py → src/models.py
-- `ExperimentEngine` --uses--> `LLMClient`  [INFERRED]
-  scripts/run_retrieval_experiment.py → src/extraction/llm_client.py
-- `ExperimentEngine` --uses--> `SeedRetriever`  [INFERRED]
-  scripts/run_retrieval_experiment.py → src/storage/retriever.py
-- `cmd_extract()` --uses--> `LLMClient`  [INFERRED]
-  run.py → src/extraction/llm_client.py
-- `cmd_generate()` --uses--> `LLMClient`  [INFERRED]
-  run.py → src/extraction/llm_client.py
+- `extraction_env()` --uses--> `StorageRepository`  [INFERRED]
+  tests/test_extraction.py → src/storage/repository.py
+- `repo()` --uses--> `StorageRepository`  [INFERRED]
+  tests/test_jobs_and_creations.py → src/storage/repository.py
+- `test_batch_extractor_job_tracking()` --uses--> `StorageRepository`  [INFERRED]
+  tests/test_jobs_and_creations.py → src/storage/repository.py
+- `test_pipeline_job_lifecycle()` --uses--> `StorageRepository`  [INFERRED]
+  tests/test_jobs_and_creations.py → src/storage/repository.py
 
 ## Import Cycles
 - None detected.
 
-## Communities (405 total, 373 thin omitted)
+## Communities (399 total, 361 thin omitted)
 
 ### Community 0 - "LLMServiceError"
-Cohesion: 0.06
+Cohesion: 0.07
 Nodes (8): LLMServiceError, BaseLLMProvider, ClaudeProvider, _clean_and_parse_json(), GeminiProvider, OllamaProvider, OpenAIProvider, _pseudo_embedding()
 
 ### Community 1 - "routers/inbox.py"
-Cohesion: 0.17
-Nodes (14): get_active_inbox_job(), get_inbox_job_status(), get_inbox_stats(), list_articles(), scan_inbox(), ArticleListResponse, ArticleSummaryItem, InboxFileItem (+6 more)
+Cohesion: 0.11
+Nodes (18): build_article_detail(), get_active_inbox_job(), get_article_detail(), get_inbox_job_status(), get_inbox_stats(), list_articles(), process_inbox(), scan_inbox() (+10 more)
 
-### Community 2 - "ArticleSynthesizer"
-Cohesion: 0.08
-Nodes (13): DistilledMaterialSheet, UserStyleProfile, MaterialDistiller, ArticleSynthesizer, dump_clean_yaml(), _default_schema_instance(), mock_llm_client(), _async_extract() (+5 more)
+### Community 2 - "ArticleMetadata"
+Cohesion: 0.12
+Nodes (14): ArticleMetadata, UserStyleProfile, _default_schema_instance(), mock_llm_client(), _async_extract(), _sync_extract(), sample_article_metadata(), sample_blueprint() (+6 more)
 
 ### Community 3 - "SeedRetriever"
-Cohesion: 0.13
-Nodes (7): cmd_search(), run_evaluation(), search_seed_candidates(), SeedRetriever, score_seed2(), test_cosine_similarity(), test_jaccard_and_keyword_extraction()
+Cohesion: 0.14
+Nodes (5): cmd_search(), SeedRetriever, score_seed2(), test_cosine_similarity(), test_jaccard_and_keyword_extraction()
 
 ### Community 4 - "ArticleRecord"
-Cohesion: 0.09
-Nodes (12): ArticleRecord, ReusableAssetType, get_connection(), init_db(), test_synthesizer_job_and_creation_recording(), populated_retriever(), test_complementary_seed_selection(), temp_storage() (+4 more)
+Cohesion: 0.11
+Nodes (6): ReusableAssetType, VisualAssetManifest, init_db(), repo(), test_complementary_seed_selection(), temp_storage()
 
 ### Community 5 - "test_langfuse_observability.py"
-Cohesion: 0.10
-Nodes (10): flush_langfuse(), get_langfuse(), trace_observation(), DummySchema, test_get_langfuse_disabled_by_default(), test_llm_client_updates_trace_observation(), test_llm_client_without_langfuse(), test_trace_observation_hierarchical_when_active() (+2 more)
+Cohesion: 0.09
+Nodes (8): flush_langfuse(), get_langfuse(), trace_observation(), test_get_langfuse_disabled_by_default(), test_llm_client_updates_trace_observation(), test_trace_observation_hierarchical_when_active(), test_trace_observation_no_op_when_disabled(), test_trace_observation_records_error_on_exception()
 
 ### Community 6 - "routers/generator.py"
-Cohesion: 0.18
-Nodes (15): _build_seed_assignments(), generate_blueprint(), get_random_inspiration(), synthesize_draft(), BlueprintGenerateRequest, BlueprintGenerateResponse, DraftSynthesizeRequest, DraftSynthesizeResponse (+7 more)
+Cohesion: 0.10
+Nodes (20): build_seed_assets_response(), _build_seed_assignments(), generate_blueprint(), get_random_inspiration(), get_seed_assets(), get_seed_detail(), search_seed_candidates(), synthesize_draft() (+12 more)
 
 ### Community 8 - "paths"
 Cohesion: 0.06
@@ -464,8 +459,8 @@ Cohesion: 0.09
 Nodes (30): dependencies, axios@^1.21.0, lucide-react@^1.69.0, react@^19.3.1, react-dom@^19.3.1, tailwindcss@^4.3.4, @tailwindcss/vite@^4.3.4, devDependencies (+22 more)
 
 ### Community 11 - "routers/settings.py"
-Cohesion: 0.15
-Nodes (10): _find_env_file(), get_settings(), test_model(), _update_env_file(), update_settings(), ModelInfoItem, ModelTestRequest, ModelTestResponse (+2 more)
+Cohesion: 0.13
+Nodes (11): _find_env_file(), get_settings(), test_model(), _update_env_file(), update_settings(), ModelInfoItem, ModelTestRequest, ModelTestResponse (+3 more)
 
 ### Community 12 - "compilerOptions"
 Cohesion: 0.10
@@ -476,8 +471,8 @@ Cohesion: 0.12
 Nodes (21): api, ArticleSummaryItem, CreationDetailResponse, CreationSummaryItem, DraftSynthesizeResponse, editorApi, inboxApi, InboxFileItem (+13 more)
 
 ### Community 14 - "IngestionScanner"
-Cohesion: 0.08
-Nodes (10): cmd_ingest(), ImageFilterSettings, PDFProcessor, IngestionScanner, clean_boilerplate(), extract_author_and_date(), normalize_markdown(), VisualAssetItem (+2 more)
+Cohesion: 0.07
+Nodes (13): cmd_ingest(), ImageFilterSettings, PDFProcessor, IngestionScanner, clean_boilerplate(), extract_author_and_date(), normalize_markdown(), VisualAssetItem (+5 more)
 
 ### Community 15 - "pactory-studio"
 Cohesion: 0.12
@@ -487,6 +482,10 @@ Nodes (16): context, dockerfile, interval, retries, start_period, test, timeout,
 Cohesion: 0.12
 Nodes (16): compilerOptions, allowImportingTsExtensions, erasableSyntaxOnly, lib, module, moduleDetection, noEmit, noFallthroughCasesInSwitch (+8 more)
 
+### Community 17 - "StorageRepository"
+Cohesion: 0.05
+Nodes (5): get_connection(), get_db(), StorageRepository, test_drafts_and_creations_workflow(), test_init_db_creates_tables()
+
 ### Community 18 - "App.tsx"
 Cohesion: 0.18
 Nodes (16): observabilityApi, ObservabilityStats, App(), AuthModal(), ModelSelector(), Navbar(), NavbarProps, NavTab (+8 more)
@@ -495,61 +494,81 @@ Nodes (16): observabilityApi, ObservabilityStats, App(), AuthModal(), ModelSelec
 Cohesion: 0.38
 Nodes (6): zustand@^5.0.16, BlueprintResponse, SeedCandidateItem, DraftState, initialState, zustand
 
-### Community 20 - "models.py"
-Cohesion: 0.12
-Nodes (6): AppConfig, ArticleStatus, VisualAssetManifest, CleanYamlDumper, test_fault_tolerant_checkpointing_resumption(), test_structured_metadata_extraction()
+### Community 20 - "synthesizer.py"
+Cohesion: 0.13
+Nodes (6): DistilledMaterialSheet, SeedRoleAssignment, MaterialDistiller, CleanYamlDumper, test_material_distillation(), test_synthesis_without_raw_text_anchoring()
 
 ### Community 22 - "ArticleMetadata"
-Cohesion: 0.11
-Nodes (14): ArticleArchetype, ArticleMetadata, SeedRoleAssignment, SynthesisBlueprint, SynthesisPlanner, test_blueprint_generation_endpoint(), test_synthesize_endpoint(), test_material_distillation() (+6 more)
+Cohesion: 0.13
+Nodes (8): ArticleArchetype, SynthesisBlueprint, SynthesisPlanner, sample_seeds(), test_planner_archetype_fallback(), test_planner_sync_execution(), test_blueprint_planner(), test_draft_synthesis_output_creation()
 
 ### Community 23 - "main.py"
-Cohesion: 0.12
-Nodes (7): LoginRequest, LoginResponse, verify_auth(), lifespan(), login(), serve_spa(), shutdown_langfuse()
+Cohesion: 0.13
+Nodes (6): auth_status(), health_check(), lifespan(), root_placeholder(), serve_spa(), shutdown_langfuse()
 
 ### Community 24 - "test_api.py"
 Cohesion: 0.08
-Nodes (11): get_configured_password(), test_auth_rejection_and_login(), test_creations_crud_lifecycle(), test_health_check(), test_inbox_endpoints(), test_observability_endpoint(), test_proofread_endpoint_mocked(), test_random_inspiration_endpoint() (+3 more)
+Nodes (10): get_configured_password(), test_auth_rejection_and_login(), test_creations_crud_lifecycle(), test_health_check(), test_inbox_endpoints(), test_observability_endpoint(), test_proofread_endpoint_mocked(), test_random_inspiration_endpoint() (+2 more)
 
-### Community 25 - "cmd_generate"
-Cohesion: 0.14
-Nodes (6): cmd_check(), cmd_init(), cmd_learn_style(), cmd_pipeline(), cmd_test(), cmd_ui()
+### Community 25 - "auth.py"
+Cohesion: 0.32
+Nodes (3): LoginRequest, LoginResponse, login()
 
 ### Community 26 - "LLMClient"
-Cohesion: 0.05
-Nodes (20): _extract_title_from_text(), get_creation(), list_creations(), proofread_draft(), save_creation(), CreationDetailResponse, CreationSaveRequest, CreationSummaryItem (+12 more)
+Cohesion: 0.12
+Nodes (7): LLMClient, ArticleProofreader, test_proofreader_async_review(), test_proofreader_raises_when_no_api_key(), test_proofreader_report_mode_with_mock(), test_proofreader_rewrite_mode_with_mock(), test_split_frontmatter()
 
 ### Community 27 - ".oxlintrc.json"
 Cohesion: 0.33
 Nodes (5): plugins, rules, react/only-export-components, react/rules-of-hooks, $schema
+
+### Community 28 - "extraction_env"
+Cohesion: 0.29
+Nodes (4): ExtractionSettings, RetrievalSettings, TaxonomySettings, extraction_env()
 
 ### Community 29 - "scripts"
 Cohesion: 0.40
 Nodes (5): scripts, build, dev, lint, preview
 
 ### Community 31 - "routers/style.py"
-Cohesion: 0.24
-Nodes (6): run_style_learning(), update_style_profile(), StyleLearnRequest, StyleLearnResponse, StyleProfileResponse, StyleUpdateRequest
+Cohesion: 0.19
+Nodes (7): get_style_profile(), run_style_learning(), update_style_profile(), StyleLearnRequest, StyleLearnResponse, StyleProfileResponse, StyleUpdateRequest
 
 ### Community 32 - "load_config"
-Cohesion: 0.15
-Nodes (5): get_creation_assets(), get_seed_assets(), get_seed_detail(), get_article_detail(), load_config()
+Cohesion: 0.18
+Nodes (4): get_config(), get_repo(), AppConfig, load_config()
 
-### Community 36 - "auth_status"
-Cohesion: 0.33
-Nodes (3): auth_status(), health_check(), root_placeholder()
+### Community 34 - "cmd_extract"
+Cohesion: 0.10
+Nodes (7): cmd_check(), cmd_extract(), cmd_init(), cmd_pipeline(), cmd_test(), cmd_ui(), BatchMetadataExtractor
 
-### Community 70 - "is_retryable_error"
+### Community 37 - "run_retrieval_experiment.py"
 Cohesion: 0.29
-Nodes (3): is_retryable_error(), retry_async(), retry_sync()
+Nodes (3): ExperimentEngine, main(), test_llm_client_without_langfuse()
 
-### Community 76 - "json"
-Cohesion: 0.17
-Nodes (4): run_legacy_benchmark(), evaluate_seed_relevance(), inspect_recent(), load_env_file()
+### Community 38 - "routers/editor.py"
+Cohesion: 0.12
+Nodes (14): delete_creation(), _extract_title_from_text(), get_creation(), get_creation_assets(), list_creations(), proofread_draft(), save_creation(), update_creation() (+6 more)
+
+### Community 44 - "run.py"
+Cohesion: 0.12
+Nodes (4): cmd_generate(), ArticleSynthesizer, dump_clean_yaml(), test_synthesizer_job_and_creation_recording()
+
+### Community 45 - "ArticleRecord"
+Cohesion: 0.12
+Nodes (6): ArticleRecord, ArticleStatus, test_fault_tolerant_checkpointing_resumption(), test_structured_metadata_extraction(), test_batch_extractor_job_tracking(), test_article_crud()
+
+### Community 57 - "PactoryError"
+Cohesion: 0.25
+Nodes (4): llm_service_error_handler(), pactory_error_handler(), PactoryError, ProofreaderError
+
+### Community 76 - "llm_client.py"
+Cohesion: 0.11
+Nodes (8): run_legacy_benchmark(), evaluate_seed_relevance(), run_evaluation(), inspect_recent(), load_env_file(), is_retryable_error(), retry_async(), retry_sync()
 
 ### Community 81 - "config.py"
-Cohesion: 0.10
-Nodes (11): ExtractionSettings, PathSettings, RetrievalSettings, TaxonomySettings, distillation_env(), mock_extract(), extraction_env(), create_sample_pdf_with_image() (+3 more)
+Cohesion: 0.14
+Nodes (6): PathSettings, distillation_env(), mock_extract(), populated_retriever(), style_env(), synthesizer_env()
 
 ### Community 82 - "GeneratorPage.tsx"
 Cohesion: 0.13
@@ -557,23 +576,23 @@ Nodes (18): ArticleDetailResponse, authApi, draftApi, ProofreadResponse, RandomI
 
 ## Knowledge Gaps
 - **1 isolated node(s):** `seed-synthesis-engine`
-  These have ≤1 connection - possible missing edges. (Counts symbols only; 1126 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **373 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+  These have ≤1 connection - possible missing edges. (Counts symbols only; 1141 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **361 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `StorageRepository` connect `StorageRepository` to `routers/inbox.py`, `ArticleSynthesizer`, `SeedRetriever`, `ArticleRecord`, `routers/generator.py`, `inspirator.py`, `IngestionScanner`, `get_db`, `models.py`, `ArticleMetadata`, `main.py`, `LLMClient`, `repo`, `routers/style.py`, `load_config`, `update_creation`, `cmd_extract`, `process_inbox`, `run_retrieval_experiment.py`, `delete_creation`, `get_style_profile`, `run.py`, `.list_articles`, `_run_inbox_pipeline_task`, `json`, `get_observability_metrics`, `config.py`, `StyleLearner`?**
-  _High betweenness centrality (0.038) - this node is a cross-community bridge._
-- **Are the 16 inferred relationships involving `StorageRepository` (e.g. with `get_observability_metrics()` and `get_style_profile()`) actually correct?**
-  _`StorageRepository` has 16 INFERRED edges - model-reasoned connections that need verification._
+- **Why does `StorageRepository` connect `StorageRepository` to `load_config`, `routers/inbox.py`, `ArticleRecord`, `routers/generator.py`, `_run_inbox_pipeline_task`, `run.py`, `llm_client.py`, `ArticleRecord`, `IngestionScanner`, `config.py`, `synthesizer.py`, `StyleLearner`, `ArticleMetadata`, `extraction_env`?**
+  _High betweenness centrality (0.042) - this node is a cross-community bridge._
+- **Are the 15 inferred relationships involving `StorageRepository` (e.g. with `build_article_detail()` and `build_seed_assets_response()`) actually correct?**
+  _`StorageRepository` has 15 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `seed-synthesis-engine` to the rest of the system?**
   _1 weakly-connected nodes found - possible missing edges._
 - **Should `LLMServiceError` be split into smaller, more focused modules?**
-  _Cohesion score 0.06298701298701298 - nodes in this community are weakly interconnected._
-- **Why does `LLMClient` connect `LLMClient` to `LLMServiceError`, `routers/inbox.py`, `ArticleSynthesizer`, `SeedRetriever`, `ArticleRecord`, `test_langfuse_observability.py`, `routers/generator.py`, `inspirator.py`, `models.py`, `ArticleMetadata`, `routers/style.py`, `load_config`, `cmd_extract`, `run_retrieval_experiment.py`, `run.py`, `_run_inbox_pipeline_task`, `json`, `config.py`, `StyleLearner`?**
-  _High betweenness centrality (0.025) - this node is a cross-community bridge._
+  _Cohesion score 0.0660377358490566 - nodes in this community are weakly interconnected._
+- **Why does `LLMClient` connect `LLMClient` to `routers/inbox.py`, `ArticleMetadata`, `SeedRetriever`, `ArticleRecord`, `test_langfuse_observability.py`, `routers/generator.py`, `StorageRepository`, `synthesizer.py`, `ArticleMetadata`, `routers/style.py`, `load_config`, `cmd_extract`, `run_retrieval_experiment.py`, `routers/editor.py`, `run.py`, `ArticleRecord`, `_run_inbox_pipeline_task`, `llm_client.py`, `config.py`?**
+  _High betweenness centrality (0.032) - this node is a cross-community bridge._
 - **Are the 16 inferred relationships involving `LLMClient` (e.g. with `cmd_extract()` and `cmd_generate()`) actually correct?**
   _`LLMClient` has 16 INFERRED edges - model-reasoned connections that need verification._
-- **Should `ArticleSynthesizer` be split into smaller, more focused modules?**
-  _Cohesion score 0.07682926829268293 - nodes in this community are weakly interconnected._
+- **Should `routers/inbox.py` be split into smaller, more focused modules?**
+  _Cohesion score 0.1064102564102564 - nodes in this community are weakly interconnected._

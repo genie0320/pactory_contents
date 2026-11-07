@@ -589,6 +589,40 @@ class StorageRepository:
                 (user_final_text, custom_notes, status, now_iso, creation_id),
             )
 
+    def cleanup_older_drafts(self, topic: str, keep_creation_id: str) -> None:
+        """Clean up duplicate older DRAFT records for the same topic upon finalization."""
+        if not topic:
+            return
+        with get_db(self.db_path) as conn:
+            conn.execute(
+                "DELETE FROM drafts_and_creations WHERE topic = ? AND status = 'DRAFT' AND creation_id != ?",
+                (topic, keep_creation_id),
+            )
+
+    def sync_creation_to_outputs(self, outputs_dir: Path, creation_id: str, topic: str, text: str) -> None:
+        """Dual-write real-time synchronization between DB and filesystem output directory."""
+        if not text:
+            return
+        try:
+            outputs_dir.mkdir(parents=True, exist_ok=True)
+            matched = list(outputs_dir.glob(f"{creation_id}*.md"))
+            if not matched and "cr_" in creation_id:
+                ts_part = creation_id.replace("cr_", "")
+                matched = list(outputs_dir.glob(f"*{ts_part}*.md"))
+
+            if matched:
+                for target_file in matched:
+                    target_file.write_text(text, encoding="utf-8")
+            else:
+                import re
+                raw_topic = topic or "draft"
+                safe_slug = re.sub(r"[^\w\s-]", "", raw_topic.lower()).strip()
+                safe_slug = re.sub(r"[-\s]+", "_", safe_slug)[:40] or "final"
+                target_file = outputs_dir / f"{creation_id}_{safe_slug}.md"
+                target_file.write_text(text, encoding="utf-8")
+        except Exception:
+            pass
+
     def get_creation(self, creation_id: str) -> dict[str, Any] | None:
         """Fetch a single creation record by creation_id."""
         with get_db(self.db_path) as conn:

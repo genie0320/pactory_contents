@@ -186,6 +186,8 @@ async def update_settings(req: SettingsUpdateRequest):
     if env_updates:
         _update_env_file(env_updates)
         # Reload runtime config singleton
+        from src.api.dependencies import get_config
+        get_config.cache_clear()
         cfg = load_config()
         if req.default_model:
             cfg.extraction.default_model = req.default_model

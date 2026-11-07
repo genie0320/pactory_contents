@@ -1,11 +1,11 @@
 """Studio Editor, Creations, and Proofreading API router."""
 
-import json
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from src.api.auth import verify_auth
+from src.api.dependencies import ConfigDep, RepoDep, build_seed_assets_response
 from src.api.schemas.editor import (
     CreationDetailResponse,
     CreationSaveRequest,
@@ -14,11 +14,9 @@ from src.api.schemas.editor import (
     ProofreadRequest,
     ProofreadResponse,
 )
-from src.api.schemas.generator import SeedAssetsResponse, VisualAssetResponseItem
-from src.config import load_config
+from src.api.schemas.generator import SeedAssetsResponse
 from src.exceptions import LLMServiceError
 from src.extraction.llm_client import LLMClient
-from src.storage.repository import StorageRepository
 from src.synthesis.proofreader import ArticleProofreader
 
 router = APIRouter(tags=["Editor & Creations"], dependencies=[Depends(verify_auth)])
@@ -37,12 +35,11 @@ def _extract_title_from_text(text: str) -> str:
 # -------------------------------------------------------------
 @router.get("/creations", response_model=list[CreationSummaryItem])
 async def list_creations(
+    repo: RepoDep,
     status_filter: str | None = Query(None, alias="status"),
     limit: int = Query(50, ge=1, le=100),
 ):
     """List all draft and finalized creations."""
-    config = load_config()
-    repo = StorageRepository(db_path=config.paths.db_path, processed_dir=config.paths.processed_dir)
     records = repo.list_creations(status=status_filter, limit=limit)
 
     items: list[CreationSummaryItem] = []
@@ -66,10 +63,8 @@ async def list_creations(
 
 
 @router.get("/creations/{creation_id}", response_model=CreationDetailResponse)
-async def get_creation(creation_id: str):
+async def get_creation(creation_id: str, repo: RepoDep):
     """Retrieve full creation details including AI draft and user final revisions."""
-    config = load_config()
-    repo = StorageRepository(db_path=config.paths.db_path, processed_dir=config.paths.processed_dir)
     rec = repo.get_creation(creation_id)
     if not rec:
         raise HTTPException(
@@ -93,10 +88,8 @@ async def get_creation(creation_id: str):
 
 
 @router.post("/creations", response_model=CreationDetailResponse)
-async def save_creation(req: CreationSaveRequest):
+async def save_creation(req: CreationSaveRequest, repo: RepoDep):
     """Save a new creation record."""
-    config = load_config()
-    repo = StorageRepository(db_path=config.paths.db_path, processed_dir=config.paths.processed_dir)
     creation_id = f"c_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
 
     repo.save_draft_creation(
@@ -127,10 +120,8 @@ async def save_creation(req: CreationSaveRequest):
 
 
 @router.put("/creations/{creation_id}", response_model=CreationDetailResponse)
-async def update_creation(creation_id: str, req: CreationUpdateRequest):
+async def update_creation(creation_id: str, req: CreationUpdateRequest, repo: RepoDep, config: ConfigDep):
     """Update finalized text, editorial notes, or status of an existing creation."""
-    config = load_config()
-    repo = StorageRepository(db_path=config.paths.db_path, processed_dir=config.paths.processed_dir)
     rec = repo.get_creation(creation_id)
     if not rec:
         raise HTTPException(
@@ -147,38 +138,16 @@ async def update_creation(creation_id: str, req: CreationUpdateRequest):
 
     # Clean up duplicate older DRAFT records for the same topic upon finalization
     if req.status == "FINALIZED" and rec.get("topic"):
-        try:
-            from src.storage.db import get_db
-            with get_db(repo.db_path) as conn:
-                conn.execute(
-                    "DELETE FROM drafts_and_creations WHERE topic = ? AND status = 'DRAFT' AND creation_id != ?",
-                    (rec["topic"], creation_id),
-                )
-        except Exception:
-            pass
+        repo.cleanup_older_drafts(topic=rec["topic"], keep_creation_id=creation_id)
 
     # Policy 4: Dual-Write real-time synchronization between DB and filesystem (SSOT)
     if req.user_final_text:
-        try:
-            outputs_dir = config.paths.outputs_dir
-            outputs_dir.mkdir(parents=True, exist_ok=True)
-            matched_files = list(outputs_dir.glob(f"{creation_id}*.md"))
-            if not matched_files and "cr_" in creation_id:
-                ts_part = creation_id.replace("cr_", "")
-                matched_files = list(outputs_dir.glob(f"*{ts_part}*.md"))
-
-            if matched_files:
-                for target_file in matched_files:
-                    target_file.write_text(req.user_final_text, encoding="utf-8")
-            else:
-                import re
-                raw_topic = rec.get("topic") or "draft"
-                safe_slug = re.sub(r"[^\w\s-]", "", raw_topic.lower()).strip()
-                safe_slug = re.sub(r"[-\s]+", "_", safe_slug)[:40] or "final"
-                target_file = outputs_dir / f"{creation_id}_{safe_slug}.md"
-                target_file.write_text(req.user_final_text, encoding="utf-8")
-        except Exception:
-            pass  # Avoid breaking DB update if disk write encounters transient issue
+        repo.sync_creation_to_outputs(
+            outputs_dir=config.paths.outputs_dir,
+            creation_id=creation_id,
+            topic=rec.get("topic") or "draft",
+            text=req.user_final_text,
+        )
 
     updated = repo.get_creation(creation_id)
     return CreationDetailResponse(
@@ -197,10 +166,8 @@ async def update_creation(creation_id: str, req: CreationUpdateRequest):
 
 
 @router.delete("/creations/{creation_id}")
-async def delete_creation(creation_id: str):
+async def delete_creation(creation_id: str, repo: RepoDep):
     """Delete a creation record."""
-    config = load_config()
-    repo = StorageRepository(db_path=config.paths.db_path, processed_dir=config.paths.processed_dir)
     deleted = repo.delete_creation(creation_id)
     if not deleted:
         raise HTTPException(
@@ -251,39 +218,11 @@ async def proofread_draft(req: ProofreadRequest):
 
 
 @router.get("/creations/{creation_id}/assets", response_model=SeedAssetsResponse)
-async def get_creation_assets(creation_id: str):
+async def get_creation_assets(creation_id: str, repo: RepoDep):
     """Fetch visual assets for all seeds utilized in the given creation."""
-    config = load_config()
-    repo = StorageRepository(db_path=config.paths.db_path, processed_dir=config.paths.processed_dir)
     creation = repo.get_creation(creation_id)
     if not creation:
         raise HTTPException(status_code=404, detail="Creation record not found")
 
-    seed_ids: list[str] = []
-    if creation.seed_doc_ids_json:
-        try:
-            seed_ids = json.loads(creation.seed_doc_ids_json)
-        except Exception:
-            seed_ids = []
-
-    items: list[VisualAssetResponseItem] = []
-    for did in seed_ids:
-        art = repo.get_article(did)
-        title = art.title if art else did
-        assets = repo.get_visual_assets(did)
-        for a in assets:
-            items.append(
-                VisualAssetResponseItem(
-                    doc_id=did,
-                    doc_title=title,
-                    asset_id=a.asset_id,
-                    page_no=a.page_no,
-                    file_path=a.file_path,
-                    image_url=f"/api/media/assets/{a.file_path}",
-                    caption=a.caption,
-                    width=a.width,
-                    height=a.height,
-                )
-            )
-    return SeedAssetsResponse(total=len(items), assets=items)
-
+    seed_ids = creation.get("seed_doc_ids") or []
+    return build_seed_assets_response(repo, seed_ids)

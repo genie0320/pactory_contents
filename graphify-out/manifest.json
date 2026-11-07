@@ -114,9 +114,9 @@
     "semantic_hash": "1ca7a1ea14add71f4337a5023e4f402e"
   },
   "pyproject.toml": {
-    "mtime": 1794016865.9661086,
-    "seen": 1794017121.6118307,
-    "ast_hash": "4be1dcc29f494b6a82412e2f7919fbd8",
+    "mtime": 1794033431.2456188,
+    "seen": 1794033743.2985868,
+    "ast_hash": "6f3454bdb49e3cefb20e8bb5c3299132",
     "semantic_hash": ""
   },
   "run.py": {
@@ -168,33 +168,33 @@
     "semantic_hash": "a62ebdb240a307f921d84d851d80f0ba"
   },
   "src/api/routers/editor.py": {
-    "mtime": 1793969154.2779307,
-    "seen": 1793969609.0027483,
-    "ast_hash": "0bcbf3a4b87caf9927d24559ef089069",
+    "mtime": 1794033566.9080327,
+    "seen": 1794033743.2985868,
+    "ast_hash": "43010fa46cceac4c039644ba8f4df7ec",
     "semantic_hash": ""
   },
   "src/api/routers/generator.py": {
-    "mtime": 1794028534.0907001,
-    "seen": 1794028550.2177048,
-    "ast_hash": "ae31d12d5dfdffccb79dfb6c6755594c",
+    "mtime": 1794033706.00576,
+    "seen": 1794033743.2985868,
+    "ast_hash": "6278694100eac7b0ae2d91017ee190d4",
     "semantic_hash": ""
   },
   "src/api/routers/inbox.py": {
-    "mtime": 1793971737.88423,
-    "seen": 1793971744.0069404,
-    "ast_hash": "48307f8e14fce8d936c6c52d6e64e381",
+    "mtime": 1794033636.2655504,
+    "seen": 1794033743.2985868,
+    "ast_hash": "8ca0a8941b2cb30c09c27b8e304d7563",
     "semantic_hash": ""
   },
   "src/api/routers/observability.py": {
-    "mtime": 1793955335.9270513,
-    "seen": 1793955413.0340133,
-    "ast_hash": "0376be328b557f29f9448f556114adf1",
+    "mtime": 1794033645.5888634,
+    "seen": 1794033743.2985868,
+    "ast_hash": "cbdb20e805e22c494853e4ccfdcff88e",
     "semantic_hash": ""
   },
   "src/api/routers/style.py": {
-    "mtime": 1793963710.6948514,
-    "seen": 1793964018.3745406,
-    "ast_hash": "53ac657a740ad4fd1cefadc1943ae2ff",
+    "mtime": 1794033661.0924954,
+    "seen": 1794033743.2985868,
+    "ast_hash": "5b9f581a5545066852a384fb763ce3e4",
     "semantic_hash": ""
   },
   "src/api/schemas/__init__.py": {
@@ -306,9 +306,9 @@
     "semantic_hash": ""
   },
   "src/storage/repository.py": {
-    "mtime": 1793963937.0156543,
-    "seen": 1793964018.3745406,
-    "ast_hash": "57da78669d931b29d75ee57acd8be4c3",
+    "mtime": 1794033528.2037437,
+    "seen": 1794033743.2985868,
+    "ast_hash": "f7f97324da4a619e84973e98ce474a3c",
     "semantic_hash": ""
   },
   "src/storage/retriever.py": {
@@ -475,9 +475,9 @@
     "semantic_hash": ""
   },
   "requirements.txt": {
-    "mtime": 1794016861.9702933,
-    "seen": 1794017121.6118307,
-    "ast_hash": "04c1427e14fcde26f2e6c664da65a1fb",
+    "mtime": 1794033434.802303,
+    "seen": 1794033743.2985868,
+    "ast_hash": "87fd654883e91a7bb79fe5ee43f45a87",
     "semantic_hash": ""
   },
   "frontend/public/favicon.svg": {
@@ -679,9 +679,9 @@
     "semantic_hash": ""
   },
   "src/api/routers/settings.py": {
-    "mtime": 1794032632.9939528,
-    "seen": 1794032653.4779568,
-    "ast_hash": "dd7ea73cf0b159e090fefddc7d4a23db",
+    "mtime": 1794033457.2319765,
+    "seen": 1794033743.2985868,
+    "ast_hash": "5d1745ec549890e7c9bac48b65ba0987",
     "semantic_hash": ""
   },
   "src/api/schemas/settings.py": {
@@ -694,6 +694,24 @@
     "mtime": 1794032437.1199033,
     "seen": 1794032653.4779568,
     "ast_hash": "41069771018d122def373d25282bdb37",
+    "semantic_hash": ""
+  },
+  "skills-lock.json": {
+    "mtime": 1794033052.747545,
+    "seen": 1794033743.2985868,
+    "ast_hash": "c6a62db08785db6fd2262fa97306acc9",
+    "semantic_hash": ""
+  },
+  "src/api/dependencies.py": {
+    "mtime": 1794033539.795405,
+    "seen": 1794033743.2985868,
+    "ast_hash": "748f0e15f01cfcfd940c6c06b25e8dbe",
+    "semantic_hash": ""
+  },
+  ".agents/skills/ponytail/SKILL.md": {
+    "mtime": 1794033052.1074169,
+    "seen": 1794033743.2985868,
+    "ast_hash": "1dfb5c89a3089b4ee76f314258b7a2b3",
     "semantic_hash": ""
   },
   "frontend/package-lock.json": {

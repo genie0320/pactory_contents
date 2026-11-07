@@ -3,26 +3,23 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from src.api.auth import verify_auth
+from src.api.dependencies import ConfigDep, RepoDep
 from src.api.schemas.style import (
     StyleLearnRequest,
     StyleLearnResponse,
     StyleProfileResponse,
     StyleUpdateRequest,
 )
-from src.config import load_config
 from src.extraction.llm_client import LLMClient
 from src.models import UserStyleProfile
-from src.storage.repository import StorageRepository
 from src.synthesis.style_learner import StyleLearner
 
 router = APIRouter(prefix="/style", tags=["Style Learning"], dependencies=[Depends(verify_auth)])
 
 
 @router.get("", response_model=StyleProfileResponse)
-async def get_style_profile():
+async def get_style_profile(repo: RepoDep, config: ConfigDep):
     """Retrieve the currently active UserStyleProfile."""
-    config = load_config()
-    repo = StorageRepository(db_path=config.paths.db_path, processed_dir=config.paths.processed_dir)
     learner = StyleLearner(config=config, repo=repo)
     profile = learner.get_active_profile()
 
@@ -67,10 +64,8 @@ async def get_style_profile():
 
 
 @router.put("", response_model=StyleProfileResponse)
-async def update_style_profile(req: StyleUpdateRequest):
+async def update_style_profile(req: StyleUpdateRequest, repo: RepoDep, config: ConfigDep):
     """Directly update style profile JSON."""
-    config = load_config()
-    repo = StorageRepository(db_path=config.paths.db_path, processed_dir=config.paths.processed_dir)
     learner = StyleLearner(config=config, repo=repo)
 
     try:
@@ -94,10 +89,8 @@ async def update_style_profile(req: StyleUpdateRequest):
 
 
 @router.post("/learn", response_model=StyleLearnResponse)
-async def run_style_learning(req: StyleLearnRequest):
+async def run_style_learning(req: StyleLearnRequest, repo: RepoDep, config: ConfigDep):
     """Analyze finalized user revisions to iteratively update persona style profile."""
-    config = load_config()
-    repo = StorageRepository(db_path=config.paths.db_path, processed_dir=config.paths.processed_dir)
     llm = LLMClient()
     if not llm.api_key:
         raise HTTPException(
@@ -113,25 +106,21 @@ async def run_style_learning(req: StyleLearnRequest):
         profile = await learner.learn_style(
             min_count=min_count,
             force=force_learning,
-            window_size=req.window_size,
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Style learning execution failed: {e}",
-        )
-
-    if not profile:
-        return StyleLearnResponse(
-            success=False,
-            learned_creations_count=0,
-            updated_profile={},
-            message=f"스타일 학습에 필요한 퇴고 완료 글(최소 {min_count}편)이 충분하지 않습니다. 퇴고 후 '저장'된 글이 있는지 확인해주세요.",
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Style learning failed: {e}")
 
     return StyleLearnResponse(
-        success=True,
-        learned_creations_count=profile.based_on_creation_count,
-        updated_profile=profile.model_dump(),
-        message=f"성공적으로 {profile.based_on_creation_count}편의 글로부터 글쓴이의 고유 스타일을 학습하여 반영했습니다.",
+        status="SUCCESS",
+        learned_profile=StyleProfileResponse(
+            persona_name=profile.persona_name,
+            tone_and_manner=profile.tone_and_manner,
+            sentence_style=profile.sentence_style,
+            vocabulary_profile=profile.vocabulary_profile,
+            storytelling_structures=profile.storytelling_structures,
+            banned_patterns=profile.banned_patterns,
+            raw_profile=profile.model_dump(),
+        ),
+        finalized_creations_used=min_count,
+        message="사용자 최종 교정본 분석을 바탕으로 퍼소나 스타일 프로필을 성공적으로 학습/갱신했습니다.",
     )
