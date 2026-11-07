@@ -17,7 +17,7 @@ import httpx
 from pydantic import BaseModel
 
 from src.exceptions import LLMServiceError
-from src.observability import get_langfuse, trace_observation
+from src.observability import trace_observation
 
 logger = logging.getLogger("llm_client")
 T = TypeVar("T", bound=BaseModel)
@@ -25,58 +25,22 @@ T = TypeVar("T", bound=BaseModel)
 GEMINI_FALLBACK_CANDIDATES = ["gemini-3-flash-preview", "gemini-3.8-flash", "gemini-3.5-flash"]
 
 
-def is_retryable_error(exc: Exception) -> bool:
-    """Check if exception is a transient error eligible for retry."""
-    err_msg = str(exc).upper()
-    return any(
-        k in err_msg
-        for k in [
-            "503",
-            "504",
-            "429",
-            "UNAVAILABLE",
-            "DEADLINE_EXCEEDED",
-            "RESOURCE_EXHAUSTED",
-            "HIGH DEMAND",
-            "OVERLOADED",
-        ]
-    )
+def _run_sync(coro: Any) -> Any:
+    """Run an async coroutine synchronously, safely handling running event loops."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
 
-
-def retry_sync(func, max_retries: int = 3, base_delay: float = 1.5):
-    """Exponential backoff retry helper for synchronous API calls."""
-    last_err = None
-    for attempt in range(max_retries):
-        try:
-            return func()
-        except Exception as e:
-            last_err = e
-            if not is_retryable_error(e) or attempt == max_retries - 1:
-                break
-            delay = base_delay * (2 ** attempt)
-            logger.warning(f"Sync LLM retry #{attempt + 1} after {delay:.1f}s: {e}")
-            time.sleep(delay)
-    raise last_err or RuntimeError("LLM API call failed after retries")
-
-
-async def retry_async(func, max_retries: int = 3, base_delay: float = 1.5):
-    """Exponential backoff retry helper for async API calls."""
-    last_err = None
-    for attempt in range(max_retries):
-        try:
-            return await func()
-        except Exception as e:
-            last_err = e
-            if not is_retryable_error(e) or attempt == max_retries - 1:
-                break
-            delay = base_delay * (2 ** attempt)
-            logger.warning(f"Async LLM retry #{attempt + 1} after {delay:.1f}s: {e}")
-            await asyncio.sleep(delay)
-    raise last_err or RuntimeError("LLM API call failed after retries")
+    if loop and loop.is_running():
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(asyncio.run, coro).result()
+    return asyncio.run(coro)
 
 
 # -------------------------------------------------------------
-# 1. Base Provider Interface
+# 1. Base Provider Interface (Async-first with inherited sync wrappers)
 # -------------------------------------------------------------
 class BaseLLMProvider(ABC):
     """Abstract interface for LLM providers."""
@@ -85,25 +49,22 @@ class BaseLLMProvider(ABC):
     async def generate_text(self, system_prompt: str, user_prompt: str, model: str) -> str:
         pass
 
-    @abstractmethod
     def generate_text_sync(self, system_prompt: str, user_prompt: str, model: str) -> str:
-        pass
+        return _run_sync(self.generate_text(system_prompt, user_prompt, model))
 
     @abstractmethod
     async def extract_structured(self, system_prompt: str, user_prompt: str, schema: type[T], model: str) -> T:
         pass
 
-    @abstractmethod
     def extract_structured_sync(self, system_prompt: str, user_prompt: str, schema: type[T], model: str) -> T:
-        pass
+        return _run_sync(self.extract_structured(system_prompt, user_prompt, schema, model))
 
     @abstractmethod
     async def get_embedding(self, text: str, model: str) -> list[float]:
         pass
 
-    @abstractmethod
-    def get_embedding_sync(self, text: str, model: str) -> list[float]:
-        pass
+    def get_embedding_sync(self, text: str, model: str = "") -> list[float]:
+        return _run_sync(self.get_embedding(text, model))
 
 
 # -------------------------------------------------------------
@@ -125,8 +86,9 @@ class GeminiProvider(BaseLLMProvider):
             return types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=schema,
+                temperature=0.3,
             )
-        return types.GenerateContentConfig()
+        return types.GenerateContentConfig(temperature=0.7)
 
     async def generate_text(self, system_prompt: str, user_prompt: str, model: str) -> str:
         if not self._client:
@@ -153,32 +115,6 @@ class GeminiProvider(BaseLLMProvider):
                 if attempt == 2:
                     break
                 await asyncio.sleep(2.0 * (attempt + 1))
-        raise last_err or RuntimeError("Gemini text generation failed after retries")
-
-    def generate_text_sync(self, system_prompt: str, user_prompt: str, model: str) -> str:
-        if not self._client:
-            raise LLMServiceError("GEMINI_API_KEY is not configured.")
-        full_prompt = f"{system_prompt}\n\n{user_prompt}" if system_prompt else user_prompt
-        config = self._build_config()
-
-        target_model = model
-        last_err = None
-        for attempt in range(3):
-            try:
-                resp = self._client.models.generate_content(
-                    model=target_model,
-                    contents=full_prompt,
-                    config=config,
-                )
-                if resp and resp.text:
-                    return resp.text
-                raise RuntimeError("Gemini returned empty text response.")
-            except Exception as e:
-                last_err = e
-                logger.warning(f"Gemini text generation (sync) attempt #{attempt + 1} ({target_model}) failed: {e}")
-                if attempt == 2:
-                    break
-                time.sleep(3.0 * (attempt + 1))
         raise last_err or RuntimeError("Gemini text generation failed after retries")
 
     async def extract_structured(self, system_prompt: str, user_prompt: str, schema: type[T], model: str) -> T:
@@ -208,54 +144,11 @@ class GeminiProvider(BaseLLMProvider):
                 await asyncio.sleep(2.0 * (attempt + 1))
         raise last_err or RuntimeError("Gemini structured extraction failed after retries")
 
-    def extract_structured_sync(self, system_prompt: str, user_prompt: str, schema: type[T], model: str) -> T:
-        if not self._client:
-            raise LLMServiceError("GEMINI_API_KEY is not configured.")
-        full_prompt = f"{system_prompt}\n\n{user_prompt}" if system_prompt else user_prompt
-        config = self._build_config(schema=schema)
-
-        target_model = model
-        last_err = None
-        for attempt in range(3):
-            try:
-                resp = self._client.models.generate_content(
-                    model=target_model,
-                    contents=full_prompt,
-                    config=config,
-                )
-                if resp and resp.text:
-                    return schema.model_validate_json(resp.text)
-                raise RuntimeError("Gemini returned empty structured output.")
-            except Exception as e:
-                last_err = e
-                logger.warning(f"Gemini structured extraction (sync) attempt #{attempt + 1} ({target_model}) failed: {e}")
-                if attempt == 2:
-                    break
-                time.sleep(3.0 * (attempt + 1))
-        raise last_err or RuntimeError("Gemini structured extraction failed after retries")
-
-
     async def get_embedding(self, text: str, model: str = "gemini-embedding-001") -> list[float]:
         if not self._client:
             return _pseudo_embedding(text)
         try:
             resp = await self._client.aio.models.embed_content(
-                model=model,
-                contents=text,
-            )
-            if resp and hasattr(resp, "embedding") and resp.embedding:
-                return resp.embedding.values
-            if resp and hasattr(resp, "embeddings") and resp.embeddings:
-                return resp.embeddings[0].values
-        except Exception as e:
-            logger.warning(f"Gemini embedding API call failed ({e}), falling back to pseudo-dense vector.")
-        return _pseudo_embedding(text)
-
-    def get_embedding_sync(self, text: str, model: str = "gemini-embedding-001") -> list[float]:
-        if not self._client:
-            return _pseudo_embedding(text)
-        try:
-            resp = self._client.models.embed_content(
                 model=model,
                 contents=text,
             )
@@ -276,62 +169,31 @@ class OpenAIProvider(BaseLLMProvider):
 
     def __init__(self, api_key: str | None = None):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY", "")
-        self._async_client = None
-        self._sync_client = None
+        self._client = None
         if self.api_key:
-            from openai import AsyncOpenAI, OpenAI
-            self._async_client = AsyncOpenAI(api_key=self.api_key)
-            self._sync_client = OpenAI(api_key=self.api_key)
+            from openai import AsyncOpenAI
+            self._client = AsyncOpenAI(api_key=self.api_key)
 
     async def generate_text(self, system_prompt: str, user_prompt: str, model: str) -> str:
-        if not self._async_client:
+        if not self._client:
             raise LLMServiceError("OPENAI_API_KEY is not configured.")
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": user_prompt})
 
-        resp = await self._async_client.chat.completions.create(model=model, messages=messages)
-        return resp.choices[0].message.content or ""
-
-    def generate_text_sync(self, system_prompt: str, user_prompt: str, model: str) -> str:
-        if not self._sync_client:
-            raise LLMServiceError("OPENAI_API_KEY is not configured.")
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": user_prompt})
-
-        resp = self._sync_client.chat.completions.create(model=model, messages=messages)
+        resp = await self._client.chat.completions.create(model=model, messages=messages)
         return resp.choices[0].message.content or ""
 
     async def extract_structured(self, system_prompt: str, user_prompt: str, schema: type[T], model: str) -> T:
-        if not self._async_client:
+        if not self._client:
             raise LLMServiceError("OPENAI_API_KEY is not configured.")
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": user_prompt})
 
-        resp = await self._async_client.beta.chat.completions.parse(
-            model=model,
-            messages=messages,
-            response_format=schema,
-        )
-        parsed = resp.choices[0].message.parsed
-        if parsed is not None:
-            return parsed
-        raise RuntimeError("OpenAI returned null structured output.")
-
-    def extract_structured_sync(self, system_prompt: str, user_prompt: str, schema: type[T], model: str) -> T:
-        if not self._sync_client:
-            raise LLMServiceError("OPENAI_API_KEY is not configured.")
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": user_prompt})
-
-        resp = self._sync_client.beta.chat.completions.parse(
+        resp = await self._client.beta.chat.completions.parse(
             model=model,
             messages=messages,
             response_format=schema,
@@ -342,19 +204,10 @@ class OpenAIProvider(BaseLLMProvider):
         raise RuntimeError("OpenAI returned null structured output.")
 
     async def get_embedding(self, text: str, model: str = "text-embedding-3-small") -> list[float]:
-        if not self._async_client:
+        if not self._client:
             return _pseudo_embedding(text)
         try:
-            resp = await self._async_client.embeddings.create(model=model, input=text)
-            return resp.data[0].embedding
-        except Exception:
-            return _pseudo_embedding(text)
-
-    def get_embedding_sync(self, text: str, model: str = "text-embedding-3-small") -> list[float]:
-        if not self._sync_client:
-            return _pseudo_embedding(text)
-        try:
-            resp = self._sync_client.embeddings.create(model=model, input=text)
+            resp = await self._client.embeddings.create(model=model, input=text)
             return resp.data[0].embedding
         except Exception:
             return _pseudo_embedding(text)
@@ -368,28 +221,15 @@ class ClaudeProvider(BaseLLMProvider):
 
     def __init__(self, api_key: str | None = None):
         self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY", "")
-        self._async_client = None
-        self._sync_client = None
+        self._client = None
         if self.api_key:
             import anthropic
-            self._async_client = anthropic.AsyncAnthropic(api_key=self.api_key)
-            self._sync_client = anthropic.Anthropic(api_key=self.api_key)
+            self._client = anthropic.AsyncAnthropic(api_key=self.api_key)
 
     async def generate_text(self, system_prompt: str, user_prompt: str, model: str) -> str:
-        if not self._async_client:
+        if not self._client:
             raise LLMServiceError("ANTHROPIC_API_KEY is not configured.")
-        resp = await self._async_client.messages.create(
-            model=model,
-            max_tokens=4096,
-            system=system_prompt or "",
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        return resp.content[0].text if resp.content else ""
-
-    def generate_text_sync(self, system_prompt: str, user_prompt: str, model: str) -> str:
-        if not self._sync_client:
-            raise LLMServiceError("ANTHROPIC_API_KEY is not configured.")
-        resp = self._sync_client.messages.create(
+        resp = await self._client.messages.create(
             model=model,
             max_tokens=4096,
             system=system_prompt or "",
@@ -406,19 +246,7 @@ class ClaudeProvider(BaseLLMProvider):
         raw_text = await self.generate_text(augmented_system, user_prompt, model)
         return _clean_and_parse_json(raw_text, schema)
 
-    def extract_structured_sync(self, system_prompt: str, user_prompt: str, schema: type[T], model: str) -> T:
-        schema_json = json.dumps(schema.model_json_schema(), ensure_ascii=False)
-        augmented_system = (
-            f"{system_prompt}\n\nIMPORTANT: Respond strictly with a JSON object conforming to this schema:\n{schema_json}\n"
-            "Do NOT wrap with markdown code blocks. Return raw JSON only."
-        )
-        raw_text = self.generate_text_sync(augmented_system, user_prompt, model)
-        return _clean_and_parse_json(raw_text, schema)
-
     async def get_embedding(self, text: str, model: str = "") -> list[float]:
-        return _pseudo_embedding(text)
-
-    def get_embedding_sync(self, text: str, model: str = "") -> list[float]:
         return _pseudo_embedding(text)
 
 
@@ -447,22 +275,6 @@ class OllamaProvider(BaseLLMProvider):
         except Exception as e:
             raise LLMServiceError(f"Ollama connection error at {self.base_url}: {e}")
 
-    def generate_text_sync(self, system_prompt: str, user_prompt: str, model: str) -> str:
-        url = f"{self.base_url}/api/chat"
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": user_prompt})
-
-        try:
-            with httpx.Client(timeout=120.0) as client:
-                res = client.post(url, json={"model": model, "messages": messages, "stream": False})
-                res.raise_for_status()
-                data = res.json()
-                return data.get("message", {}).get("content", "")
-        except Exception as e:
-            raise LLMServiceError(f"Ollama connection error at {self.base_url}: {e}")
-
     async def extract_structured(self, system_prompt: str, user_prompt: str, schema: type[T], model: str) -> T:
         schema_json = json.dumps(schema.model_json_schema(), ensure_ascii=False)
         augmented_system = (
@@ -471,30 +283,11 @@ class OllamaProvider(BaseLLMProvider):
         raw_text = await self.generate_text(augmented_system, user_prompt, model)
         return _clean_and_parse_json(raw_text, schema)
 
-    def extract_structured_sync(self, system_prompt: str, user_prompt: str, schema: type[T], model: str) -> T:
-        schema_json = json.dumps(schema.model_json_schema(), ensure_ascii=False)
-        augmented_system = (
-            f"{system_prompt}\n\nIMPORTANT: Output valid JSON only matching schema:\n{schema_json}"
-        )
-        raw_text = self.generate_text_sync(augmented_system, user_prompt, model)
-        return _clean_and_parse_json(raw_text, schema)
-
     async def get_embedding(self, text: str, model: str = "nomic-embed-text") -> list[float]:
         url = f"{self.base_url}/api/embeddings"
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 res = await client.post(url, json={"model": model, "prompt": text})
-                if res.status_code == 200:
-                    return res.json().get("embedding", [])
-        except Exception:
-            pass
-        return _pseudo_embedding(text)
-
-    def get_embedding_sync(self, text: str, model: str = "nomic-embed-text") -> list[float]:
-        url = f"{self.base_url}/api/embeddings"
-        try:
-            with httpx.Client(timeout=30.0) as client:
-                res = client.post(url, json={"model": model, "prompt": text})
                 if res.status_code == 200:
                     return res.json().get("embedding", [])
         except Exception:
@@ -618,63 +411,6 @@ class LLMClient:
         in_price, out_price = pricing.get(self.model, (0.15, 0.60))
         cost = (prompt_tokens * in_price + completion_tokens * out_price) / 1_000_000.0
         return prompt_tokens, completion_tokens, cost
-
-    def _log_observability(
-        self,
-        task_type: str,
-        latency_ms: float,
-        prompt_text: str,
-        completion_text: str,
-        system_prompt: str | None = None,
-        user_prompt: str | None = None,
-    ) -> None:
-        """Estimate token counts, log usage to repository, and trace to Langfuse if configured."""
-        prompt_tokens, completion_tokens, cost = self._calculate_usage(prompt_text, completion_text)
-
-        if self.repo:
-            try:
-                self.repo.log_llm_usage(
-                    task_type=task_type,
-                    provider=self.provider,
-                    model=self.model,
-                    prompt_tokens=prompt_tokens,
-                    completion_tokens=completion_tokens,
-                    latency_ms=latency_ms,
-                    estimated_cost_usd=cost,
-                )
-            except Exception:
-                pass
-
-        # Standalone trace fallback for direct calls
-        lf = get_langfuse()
-        if lf:
-            try:
-                input_payload = (
-                    {"system": system_prompt, "prompt": user_prompt}
-                    if (system_prompt is not None or user_prompt is not None)
-                    else {"prompt": prompt_text}
-                )
-                obs = lf.start_observation(
-                    name=f"pactory:{task_type}",
-                    as_type="generation",
-                    model=self.model,
-                    input=input_payload,
-                    output=completion_text,
-                    metadata={
-                        "provider": self.provider,
-                        "latency_ms": latency_ms,
-                        "task_type": task_type,
-                    },
-                    usage_details={
-                        "input": prompt_tokens,
-                        "output": completion_tokens,
-                        "total": prompt_tokens + completion_tokens,
-                    },
-                    cost_details={"total": cost},
-                )
-                obs.end()
-            except Exception as e:
-                logger.debug(f"Langfuse trace logging failed: {e}")
 
     async def generate_text(
         self,

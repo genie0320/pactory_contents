@@ -252,9 +252,9 @@
     "semantic_hash": ""
   },
   "src/extraction/llm_client.py": {
-    "mtime": 1794032338.3263242,
-    "seen": 1794032653.4779568,
-    "ast_hash": "0a3bd335efcf6fe0b321a4b082aa6c5f",
+    "mtime": 1794034702.3800938,
+    "seen": 1794034737.8971221,
+    "ast_hash": "adacad908dffe0b941726451e95da043",
     "semantic_hash": ""
   },
   "src/extraction/prompts.py": {
