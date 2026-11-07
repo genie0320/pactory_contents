@@ -1,6 +1,5 @@
 """Draft Generation and Synthesis API router."""
 
-import json
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException

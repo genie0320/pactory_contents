@@ -51,7 +51,7 @@ def distillation_env(tmp_path: Path):
 
     mock_llm = MagicMock(spec=LLMClient)
 
-    def mock_extract(system_prompt="", user_prompt="", schema=None, model=None):
+    def mock_extract(system_prompt="", user_prompt="", schema=None, model=None, **kwargs):
         if schema == DistilledMaterialSheet:
             return DistilledMaterialSheet(
                 doc_id="5455",

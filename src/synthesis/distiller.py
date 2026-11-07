@@ -36,13 +36,14 @@ class MaterialDistiller:
         user_prompt = MATERIAL_DISTILLATION_USER_PROMPT.format(
             doc_id=seed.doc_id,
             assigned_role=seed.seed_type,
-            raw_text=raw_text[:12000],
+            raw_text=raw_text[:20000],
         )
 
         sheet = await self.llm_client.extract_structured(
             system_prompt=MATERIAL_DISTILLATION_SYSTEM_PROMPT,
             user_prompt=user_prompt,
             schema=DistilledMaterialSheet,
+            task_type="material_distillation",
         )
         return sheet
 
@@ -61,13 +62,14 @@ class MaterialDistiller:
         user_prompt = MATERIAL_DISTILLATION_USER_PROMPT.format(
             doc_id=seed.doc_id,
             assigned_role=seed.seed_type,
-            raw_text=raw_text[:12000],
+            raw_text=raw_text[:20000],
         )
 
         sheet = self.llm_client.extract_structured_sync(
             system_prompt=MATERIAL_DISTILLATION_SYSTEM_PROMPT,
             user_prompt=user_prompt,
             schema=DistilledMaterialSheet,
+            task_type="material_distillation",
         )
         return sheet
 

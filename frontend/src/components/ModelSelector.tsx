@@ -8,8 +8,10 @@ export interface ModelOption {
 }
 
 export const AVAILABLE_MODELS: ModelOption[] = [
-  { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash-Lite', badge: '고속/경량' },
-  { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash', badge: '추천/고품질' },
+  { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash Preview', badge: '추천/안정' },
+  { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash', badge: '최신/고품질' },
+  { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash', badge: '표준' },
+  { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash-Lite', badge: '경량(500/일)' },
   { id: 'gemini-3.8-pro', name: 'Gemini 3.8 Pro', badge: '심층/최상위' },
   { id: 'gpt-4o-mini', name: 'GPT-4o Mini', badge: 'OpenAI' },
   { id: 'claude-3-7-sonnet-latest', name: 'Claude 3.7 Sonnet', badge: 'Anthropic' },

@@ -163,6 +163,10 @@ class DistilledMaterialSheet(BaseModel):
     raw_templates_or_criteria: list[str] = Field(
         default_factory=list, description="체크리스트 판단 기준, 프롬프트 핵심 조건 등 새 글의 도메인에 맞게 치환할 원재료"
     )
+    rich_context_excerpts: list[str] = Field(
+        default_factory=list,
+        description="원문의 서술식 문장을 배제하고, 원문에 등장하는 핵심 에피소드·상황·실험·인터뷰의 구체적 사실관계를 입체적으로 복원한 심층 팩트 블록 리스트",
+    )
 
 
 class UserStyleProfile(BaseModel):

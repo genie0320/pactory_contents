@@ -2,15 +2,19 @@ import { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import type { NavTab } from './components/Navbar';
 import { AuthModal } from './components/AuthModal';
+import { SettingsModal } from './components/SettingsModal';
 import { GeneratorPage } from './pages/GeneratorPage';
 import { StudioEditorPage } from './pages/StudioEditorPage';
 import { LibraryPage } from './pages/LibraryPage';
 import { InboxPage } from './pages/InboxPage';
 import { StylePersonaPage } from './pages/StylePersonaPage';
+import { settingsApi } from './api/client';
+import { useDraftStore } from './store/useDraftStore';
 
 export function App() {
   const [currentTab, setCurrentTab] = useState<NavTab>('generator');
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Editor transfer state
   const [editorCreationId, setEditorCreationId] = useState<string | undefined>();
@@ -18,6 +22,16 @@ export function App() {
   const [editorTopic, setEditorTopic] = useState<string>('');
 
   useEffect(() => {
+    // Initial fetch of configured studio model to sync draft store
+    settingsApi
+      .getSettings()
+      .then((s) => {
+        if (s?.default_model) {
+          useDraftStore.getState().updateDefaultModel(s.default_model);
+        }
+      })
+      .catch(() => {});
+
     const handleUnauthorized = () => {
       setIsAuthOpen(true);
     };
@@ -56,6 +70,7 @@ export function App() {
         currentTab={currentTab}
         onSelectTab={setCurrentTab}
         onOpenAuth={() => setIsAuthOpen(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
       <main className="flex-1">
@@ -78,6 +93,11 @@ export function App() {
         isOpen={isAuthOpen}
         onClose={() => setIsAuthOpen(false)}
         onSuccess={() => {}}
+      />
+
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
       />
     </div>
   );

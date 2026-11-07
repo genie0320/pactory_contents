@@ -77,6 +77,7 @@ class BatchMetadataExtractor:
                     system_prompt=METADATA_EXTRACTION_SYSTEM_PROMPT,
                     user_prompt=user_prompt,
                     schema=ArticleMetadata,
+                    task_type="metadata_extraction",
                 )
 
                 # Immediate checkpoint commit:

@@ -73,6 +73,7 @@ class ArticleProofreader:
             raw_response = await self.llm_client.generate_text(
                 system_prompt=PROOFREADING_SYSTEM_PROMPT,
                 user_prompt=user_prompt,
+                task_type=f"proofreading_{mode}",
             )
             return self._parse_llm_response(raw_response, platform, mode, clean_body)
         except Exception as e:
@@ -112,6 +113,7 @@ class ArticleProofreader:
             raw_response = self.llm_client.generate_text_sync(
                 system_prompt=PROOFREADING_SYSTEM_PROMPT,
                 user_prompt=user_prompt,
+                task_type=f"proofreading_{mode}",
             )
             return self._parse_llm_response(raw_response, platform, mode, clean_body)
         except Exception as e:

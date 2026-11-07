@@ -4,6 +4,7 @@ Stateless FastAPI backend serving multi-platform drafting, synthesis,
 proofreading, and indexing capabilities.
 """
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, status
@@ -12,14 +13,24 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.api.auth import LoginRequest, LoginResponse, get_configured_password
-from src.api.routers import editor, generator, inbox, observability, style
+from src.api.routers import editor, generator, inbox, observability, settings, style
 from src.config import load_config
 from src.exceptions import LLMServiceError, PactoryError
+from src.observability import flush_langfuse, shutdown_langfuse
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    flush_langfuse()
+    shutdown_langfuse()
+
 
 app = FastAPI(
     title="Pactory Studio API",
     description="Headless editorial synthesis, seed retrieval, and proofreading engine.",
     version="2.0.0",
+    lifespan=lifespan,
 )
 
 # -------------------------------------------------------------
@@ -89,6 +100,7 @@ app.include_router(generator.router, prefix="/api")
 app.include_router(editor.router, prefix="/api")
 app.include_router(style.router, prefix="/api")
 app.include_router(observability.router, prefix="/api")
+app.include_router(settings.router, prefix="/api")
 
 # -------------------------------------------------------------
 # Visual Seed Asset Serving

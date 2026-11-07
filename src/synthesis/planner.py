@@ -55,6 +55,7 @@ class SynthesisPlanner:
             system_prompt=BLUEPRINT_GENERATION_SYSTEM_PROMPT,
             user_prompt=user_prompt,
             schema=SynthesisBlueprint,
+            task_type="blueprint_planning",
         )
 
         return blueprint
@@ -94,4 +95,5 @@ class SynthesisPlanner:
             system_prompt=BLUEPRINT_GENERATION_SYSTEM_PROMPT,
             user_prompt=user_prompt,
             schema=SynthesisBlueprint,
+            task_type="blueprint_planning",
         )

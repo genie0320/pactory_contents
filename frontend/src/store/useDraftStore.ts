@@ -38,6 +38,7 @@ interface DraftState {
   setInspirationModel: (m: string) => void;
   setStep2Model: (m: string) => void;
   setStep3Model: (m: string) => void;
+  updateDefaultModel: (m: string) => void;
 
   // Clean reset
   resetDraft: () => void;
@@ -56,9 +57,9 @@ const initialState = {
   isSearchingSeeds: false,
   isGeneratingBlueprint: false,
   isSynthesizing: false,
-  inspirationModel: 'gemini-3.5-flash-lite',
-  step2Model: 'gemini-3.5-flash-lite',
-  step3Model: 'gemini-3.5-flash-lite',
+  inspirationModel: 'gemini-3-flash-preview',
+  step2Model: 'gemini-3-flash-preview',
+  step3Model: 'gemini-3-flash-preview',
 };
 
 export const useDraftStore = create<DraftState>((set) => ({
@@ -87,6 +88,12 @@ export const useDraftStore = create<DraftState>((set) => ({
   setInspirationModel: (inspirationModel) => set({ inspirationModel }),
   setStep2Model: (step2Model) => set({ step2Model }),
   setStep3Model: (step3Model) => set({ step3Model }),
+  updateDefaultModel: (model) =>
+    set({
+      inspirationModel: model,
+      step2Model: model,
+      step3Model: model,
+    }),
 
   resetDraft: () => {
     set({ ...initialState });

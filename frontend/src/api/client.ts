@@ -340,3 +340,51 @@ export const observabilityApi = {
   getStats: () => api.get<ObservabilityStats>('/api/observability/stats').then((r) => r.data),
 };
 
+export interface ModelInfoItem {
+  id: string;
+  name: string;
+  provider: string;
+  badge: string;
+  description: string;
+}
+
+export interface SettingsResponse {
+  default_model: string;
+  default_provider: string;
+  default_thinking_level: string;
+  available_models: ModelInfoItem[];
+  api_keys_configured: {
+    gemini: boolean;
+    openai: boolean;
+    anthropic: boolean;
+    langfuse: boolean;
+  };
+  langfuse_configured: boolean;
+  langfuse_host: string;
+}
+
+export interface SettingsUpdateRequest {
+  default_model?: string;
+  default_provider?: string;
+  default_thinking_level?: string;
+  gemini_api_key?: string;
+  openai_api_key?: string;
+  anthropic_api_key?: string;
+}
+
+export interface ModelTestResponse {
+  success: boolean;
+  model: string;
+  latency_ms: number;
+  message: string;
+  error_type?: string;
+}
+
+export const settingsApi = {
+  getSettings: () => api.get<SettingsResponse>('/api/settings').then((r) => r.data),
+  updateSettings: (payload: SettingsUpdateRequest) =>
+    api.post<SettingsResponse>('/api/settings', payload).then((r) => r.data),
+  testModel: (model: string, provider: string = 'gemini') =>
+    api.post<ModelTestResponse>('/api/settings/test-model', { model, provider }).then((r) => r.data),
+};
+

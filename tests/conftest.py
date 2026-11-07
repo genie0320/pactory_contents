@@ -115,11 +115,11 @@ def mock_llm_client(sample_article_metadata, sample_blueprint, sample_style_prof
     client.model = "gemini-3.5-flash-lite"
 
     # Async extract_structured
-    async def _async_extract(system_prompt="", user_prompt="", schema=None, model=None):
+    async def _async_extract(system_prompt="", user_prompt="", schema=None, model=None, **kwargs):
         return _default_schema_instance(schema)
 
     # Sync extract_structured_sync
-    def _sync_extract(system_prompt="", user_prompt="", schema=None, model=None):
+    def _sync_extract(system_prompt="", user_prompt="", schema=None, model=None, **kwargs):
         return _default_schema_instance(schema)
 
     client.extract_structured = AsyncMock(side_effect=_async_extract)

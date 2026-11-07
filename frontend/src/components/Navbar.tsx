@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { PenTool, Edit3, BookOpen, Database, Sparkles, RotateCcw, Lock, Zap } from 'lucide-react';
+import { PenTool, Edit3, BookOpen, Database, Sparkles, RotateCcw, Lock, Zap, Settings } from 'lucide-react';
 import { useDraftStore } from '../store/useDraftStore';
 import { observabilityApi, type ObservabilityStats } from '../api/client';
 
@@ -9,9 +9,10 @@ interface NavbarProps {
   currentTab: NavTab;
   onSelectTab: (tab: NavTab) => void;
   onOpenAuth: () => void;
+  onOpenSettings: () => void;
 }
 
-export const Navbar = ({ currentTab, onSelectTab, onOpenAuth }: NavbarProps) => {
+export const Navbar = ({ currentTab, onSelectTab, onOpenAuth, onOpenSettings }: NavbarProps) => {
   const resetDraft = useDraftStore((s) => s.resetDraft);
   const [obsStats, setObsStats] = useState<ObservabilityStats | null>(null);
 
@@ -156,6 +157,14 @@ export const Navbar = ({ currentTab, onSelectTab, onOpenAuth }: NavbarProps) => 
               className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors"
             >
               <Lock className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={onOpenSettings}
+              title="스튜디오 시스템 및 AI 모델 설정 (무중단 변경)"
+              className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg border border-slate-200 transition-colors"
+            >
+              <Settings className="w-4 h-4" />
             </button>
           </div>
         </div>

@@ -17,11 +17,12 @@ import httpx
 from pydantic import BaseModel
 
 from src.exceptions import LLMServiceError
+from src.observability import get_langfuse, trace_observation
 
 logger = logging.getLogger("llm_client")
 T = TypeVar("T", bound=BaseModel)
 
-GEMINI_FALLBACK_CANDIDATES = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-2.5-flash"]
+GEMINI_FALLBACK_CANDIDATES = ["gemini-3-flash-preview", "gemini-3.8-flash", "gemini-3.5-flash"]
 
 
 def is_retryable_error(exc: Exception) -> bool:
@@ -151,10 +152,7 @@ class GeminiProvider(BaseLLMProvider):
                 logger.warning(f"Gemini text generation attempt #{attempt + 1} ({target_model}) failed: {e}")
                 if attempt == 2:
                     break
-                if target_model != "gemini-3.5-flash-lite":
-                    target_model = "gemini-3.5-flash-lite"
-                    logger.info(f"Failing over to resilient model: {target_model}")
-                await asyncio.sleep(1.5 * (attempt + 1))
+                await asyncio.sleep(2.0 * (attempt + 1))
         raise last_err or RuntimeError("Gemini text generation failed after retries")
 
     def generate_text_sync(self, system_prompt: str, user_prompt: str, model: str) -> str:
@@ -180,10 +178,7 @@ class GeminiProvider(BaseLLMProvider):
                 logger.warning(f"Gemini text generation (sync) attempt #{attempt + 1} ({target_model}) failed: {e}")
                 if attempt == 2:
                     break
-                if target_model != "gemini-3.5-flash-lite":
-                    target_model = "gemini-3.5-flash-lite"
-                    logger.info(f"Failing over to resilient model: {target_model}")
-                time.sleep(1.5 * (attempt + 1))
+                time.sleep(3.0 * (attempt + 1))
         raise last_err or RuntimeError("Gemini text generation failed after retries")
 
     async def extract_structured(self, system_prompt: str, user_prompt: str, schema: type[T], model: str) -> T:
@@ -210,10 +205,7 @@ class GeminiProvider(BaseLLMProvider):
                 logger.warning(f"Gemini structured extraction attempt #{attempt + 1} ({target_model}) failed: {e}")
                 if attempt == 2:
                     break
-                if target_model != "gemini-3.5-flash-lite":
-                    target_model = "gemini-3.5-flash-lite"
-                    logger.info(f"Failing over to resilient model: {target_model}")
-                await asyncio.sleep(1.5 * (attempt + 1))
+                await asyncio.sleep(2.0 * (attempt + 1))
         raise last_err or RuntimeError("Gemini structured extraction failed after retries")
 
     def extract_structured_sync(self, system_prompt: str, user_prompt: str, schema: type[T], model: str) -> T:
@@ -239,10 +231,7 @@ class GeminiProvider(BaseLLMProvider):
                 logger.warning(f"Gemini structured extraction (sync) attempt #{attempt + 1} ({target_model}) failed: {e}")
                 if attempt == 2:
                     break
-                if target_model != "gemini-3.5-flash-lite":
-                    target_model = "gemini-3.5-flash-lite"
-                    logger.info(f"Failing over to resilient model: {target_model}")
-                time.sleep(1.5 * (attempt + 1))
+                time.sleep(3.0 * (attempt + 1))
         raise last_err or RuntimeError("Gemini structured extraction failed after retries")
 
 
@@ -589,7 +578,7 @@ class LLMClient:
         self.repo = repo
 
         if self.provider == "gemini":
-            self.model = model or os.getenv("DEFAULT_MODEL", "gemini-3.5-flash-lite")
+            self.model = model or os.getenv("DEFAULT_MODEL", "gemini-3-flash-preview")
             self.api_key = api_key or gemini_key
             self._adapter = GeminiProvider(api_key=self.api_key)
         elif self.provider == "claude":
@@ -605,27 +594,21 @@ class LLMClient:
             self.api_key = "local-ollama"
             self._adapter = OllamaProvider()
         else:
-            self.model = model or "gemini-3.5-flash-lite"
+            self.model = model or os.getenv("DEFAULT_MODEL", "gemini-3-flash-preview")
             self.api_key = api_key or gemini_key
             self._adapter = GeminiProvider(api_key=self.api_key)
 
-    def _log_observability(
-        self,
-        task_type: str,
-        latency_ms: float,
-        prompt_text: str,
-        completion_text: str,
-    ) -> None:
-        """Estimate token counts and log usage to repository."""
-        if not self.repo:
-            return
+    def _calculate_usage(self, prompt_text: str, completion_text: str) -> tuple[int, int, float]:
+        """Estimate token counts and cost for the active model."""
         prompt_tokens = max(1, len(prompt_text) // 3)
         completion_tokens = max(1, len(completion_text) // 3)
 
-        # Approximate pricing table per 1M tokens
         pricing = {
+            "gemini-3-flash-preview": (0.15, 0.60),
             "gemini-3.5-flash-lite": (0.075, 0.30),
             "gemini-3.5-flash": (0.15, 0.60),
+            "gemini-3.8-flash": (0.15, 0.60),
+            "gemini-3.8-pro": (1.25, 5.00),
             "gpt-4o-mini": (0.15, 0.60),
             "gpt-4o": (2.50, 10.00),
             "claude-3-7-sonnet-latest": (3.00, 15.00),
@@ -634,51 +617,244 @@ class LLMClient:
         }
         in_price, out_price = pricing.get(self.model, (0.15, 0.60))
         cost = (prompt_tokens * in_price + completion_tokens * out_price) / 1_000_000.0
+        return prompt_tokens, completion_tokens, cost
 
-        try:
-            self.repo.log_llm_usage(
-                task_type=task_type,
-                provider=self.provider,
-                model=self.model,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                latency_ms=latency_ms,
-                estimated_cost_usd=cost,
-            )
-        except Exception:
-            pass
+    def _log_observability(
+        self,
+        task_type: str,
+        latency_ms: float,
+        prompt_text: str,
+        completion_text: str,
+        system_prompt: str | None = None,
+        user_prompt: str | None = None,
+    ) -> None:
+        """Estimate token counts, log usage to repository, and trace to Langfuse if configured."""
+        prompt_tokens, completion_tokens, cost = self._calculate_usage(prompt_text, completion_text)
 
-    async def generate_text(self, system_prompt: str, user_prompt: str) -> str:
+        if self.repo:
+            try:
+                self.repo.log_llm_usage(
+                    task_type=task_type,
+                    provider=self.provider,
+                    model=self.model,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    latency_ms=latency_ms,
+                    estimated_cost_usd=cost,
+                )
+            except Exception:
+                pass
+
+        # Standalone trace fallback for direct calls
+        lf = get_langfuse()
+        if lf:
+            try:
+                input_payload = (
+                    {"system": system_prompt, "prompt": user_prompt}
+                    if (system_prompt is not None or user_prompt is not None)
+                    else {"prompt": prompt_text}
+                )
+                obs = lf.start_observation(
+                    name=f"pactory:{task_type}",
+                    as_type="generation",
+                    model=self.model,
+                    input=input_payload,
+                    output=completion_text,
+                    metadata={
+                        "provider": self.provider,
+                        "latency_ms": latency_ms,
+                        "task_type": task_type,
+                    },
+                    usage_details={
+                        "input": prompt_tokens,
+                        "output": completion_tokens,
+                        "total": prompt_tokens + completion_tokens,
+                    },
+                    cost_details={"total": cost},
+                )
+                obs.end()
+            except Exception as e:
+                logger.debug(f"Langfuse trace logging failed: {e}")
+
+    async def generate_text(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        task_type: str = "generate_text",
+    ) -> str:
         """Asynchronous text generation."""
         t0 = time.perf_counter()
-        res = await self._adapter.generate_text(system_prompt, user_prompt, self.model)
-        latency = (time.perf_counter() - t0) * 1000.0
-        self._log_observability("generate_text", latency, f"{system_prompt} {user_prompt}", res)
-        return res
+        input_payload = {"system": system_prompt, "prompt": user_prompt}
+        with trace_observation(
+            name=f"pactory:{task_type}",
+            as_type="generation",
+            model=self.model,
+            input_data=input_payload,
+            metadata={"provider": self.provider, "task_type": task_type},
+        ) as obs:
+            res = await self._adapter.generate_text(system_prompt, user_prompt, self.model)
+            latency = (time.perf_counter() - t0) * 1000.0
+            p_tok, c_tok, cost = self._calculate_usage(f"{system_prompt} {user_prompt}", res)
+            if obs is not None:
+                try:
+                    obs.update(
+                        output=res,
+                        usage_details={"input": p_tok, "output": c_tok, "total": p_tok + c_tok},
+                        cost_details={"total": cost},
+                        metadata={"provider": self.provider, "latency_ms": latency},
+                    )
+                except Exception:
+                    pass
+            if self.repo:
+                try:
+                    self.repo.log_llm_usage(
+                        task_type=task_type,
+                        provider=self.provider,
+                        model=self.model,
+                        prompt_tokens=p_tok,
+                        completion_tokens=c_tok,
+                        latency_ms=latency,
+                        estimated_cost_usd=cost,
+                    )
+                except Exception:
+                    pass
+            return res
 
-    def generate_text_sync(self, system_prompt: str, user_prompt: str) -> str:
+    def generate_text_sync(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        task_type: str = "generate_text_sync",
+    ) -> str:
         """Synchronous text generation."""
         t0 = time.perf_counter()
-        res = self._adapter.generate_text_sync(system_prompt, user_prompt, self.model)
-        latency = (time.perf_counter() - t0) * 1000.0
-        self._log_observability("generate_text_sync", latency, f"{system_prompt} {user_prompt}", res)
-        return res
+        input_payload = {"system": system_prompt, "prompt": user_prompt}
+        with trace_observation(
+            name=f"pactory:{task_type}",
+            as_type="generation",
+            model=self.model,
+            input_data=input_payload,
+            metadata={"provider": self.provider, "task_type": task_type},
+        ) as obs:
+            res = self._adapter.generate_text_sync(system_prompt, user_prompt, self.model)
+            latency = (time.perf_counter() - t0) * 1000.0
+            p_tok, c_tok, cost = self._calculate_usage(f"{system_prompt} {user_prompt}", res)
+            if obs is not None:
+                try:
+                    obs.update(
+                        output=res,
+                        usage_details={"input": p_tok, "output": c_tok, "total": p_tok + c_tok},
+                        cost_details={"total": cost},
+                        metadata={"provider": self.provider, "latency_ms": latency},
+                    )
+                except Exception:
+                    pass
+            if self.repo:
+                try:
+                    self.repo.log_llm_usage(
+                        task_type=task_type,
+                        provider=self.provider,
+                        model=self.model,
+                        prompt_tokens=p_tok,
+                        completion_tokens=c_tok,
+                        latency_ms=latency,
+                        estimated_cost_usd=cost,
+                    )
+                except Exception:
+                    pass
+            return res
 
-    async def extract_structured(self, system_prompt: str, user_prompt: str, schema: type[T]) -> T:
+    async def extract_structured(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        schema: type[T],
+        task_type: str = "extract_structured",
+    ) -> T:
         """Asynchronous structured extraction."""
         t0 = time.perf_counter()
-        res = await self._adapter.extract_structured(system_prompt, user_prompt, schema, self.model)
-        latency = (time.perf_counter() - t0) * 1000.0
-        self._log_observability("extract_structured", latency, f"{system_prompt} {user_prompt}", str(res))
-        return res
+        input_payload = {"system": system_prompt, "prompt": user_prompt, "schema": schema.__name__}
+        with trace_observation(
+            name=f"pactory:{task_type}",
+            as_type="generation",
+            model=self.model,
+            input_data=input_payload,
+            metadata={"provider": self.provider, "task_type": task_type, "schema": schema.__name__},
+        ) as obs:
+            res = await self._adapter.extract_structured(system_prompt, user_prompt, schema, self.model)
+            latency = (time.perf_counter() - t0) * 1000.0
+            output_dump = res.model_dump() if hasattr(res, "model_dump") else str(res)
+            p_tok, c_tok, cost = self._calculate_usage(f"{system_prompt} {user_prompt}", str(output_dump))
+            if obs is not None:
+                try:
+                    obs.update(
+                        output=output_dump,
+                        usage_details={"input": p_tok, "output": c_tok, "total": p_tok + c_tok},
+                        cost_details={"total": cost},
+                        metadata={"provider": self.provider, "latency_ms": latency},
+                    )
+                except Exception:
+                    pass
+            if self.repo:
+                try:
+                    self.repo.log_llm_usage(
+                        task_type=task_type,
+                        provider=self.provider,
+                        model=self.model,
+                        prompt_tokens=p_tok,
+                        completion_tokens=c_tok,
+                        latency_ms=latency,
+                        estimated_cost_usd=cost,
+                    )
+                except Exception:
+                    pass
+            return res
 
-    def extract_structured_sync(self, system_prompt: str, user_prompt: str, schema: type[T]) -> T:
+    def extract_structured_sync(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        schema: type[T],
+        task_type: str = "extract_structured_sync",
+    ) -> T:
         """Synchronous structured extraction."""
         t0 = time.perf_counter()
-        res = self._adapter.extract_structured_sync(system_prompt, user_prompt, schema, self.model)
-        latency = (time.perf_counter() - t0) * 1000.0
-        self._log_observability("extract_structured_sync", latency, f"{system_prompt} {user_prompt}", str(res))
-        return res
+        input_payload = {"system": system_prompt, "prompt": user_prompt, "schema": schema.__name__}
+        with trace_observation(
+            name=f"pactory:{task_type}",
+            as_type="generation",
+            model=self.model,
+            input_data=input_payload,
+            metadata={"provider": self.provider, "task_type": task_type, "schema": schema.__name__},
+        ) as obs:
+            res = self._adapter.extract_structured_sync(system_prompt, user_prompt, schema, self.model)
+            latency = (time.perf_counter() - t0) * 1000.0
+            output_dump = res.model_dump() if hasattr(res, "model_dump") else str(res)
+            p_tok, c_tok, cost = self._calculate_usage(f"{system_prompt} {user_prompt}", str(output_dump))
+            if obs is not None:
+                try:
+                    obs.update(
+                        output=output_dump,
+                        usage_details={"input": p_tok, "output": c_tok, "total": p_tok + c_tok},
+                        cost_details={"total": cost},
+                        metadata={"provider": self.provider, "latency_ms": latency},
+                    )
+                except Exception:
+                    pass
+            if self.repo:
+                try:
+                    self.repo.log_llm_usage(
+                        task_type=task_type,
+                        provider=self.provider,
+                        model=self.model,
+                        prompt_tokens=p_tok,
+                        completion_tokens=c_tok,
+                        latency_ms=latency,
+                        estimated_cost_usd=cost,
+                    )
+                except Exception:
+                    pass
+            return res
 
     async def get_embedding(self, text: str, model: str | None = None) -> list[float]:
         """Generate dense embedding vector."""
